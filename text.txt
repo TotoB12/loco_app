@@ -1,0 +1,1659 @@
+I am developing a simple mobile application that allows people to share their live location with others. I am currently trying to develop the part of it that will send regular location updates to the Firestone Database, and have it be fully functional on Android and iOS. I have it coded it in Native Expo React.
+I want to have my app work as efficiently as possible, with great accuracy and low battery usage. Ideally, I want my app to have a background task that runs whenever the app is closed, sending the user's current location to their user item in the database. I know that using Expo React, the background tasks of Android and iPhone devices are different, but I want you to help me find the best solution to work properly with both platforms. I want to replicate the services of other apps like Google Maps sharing or WhatsApp sharing, but better. The best would be to have my app send a location update every minute. The database should hold the latest position as part of the user item, along with the timestamp.
+
+Here is the current setup.
+
+App.js
+```javascript
+// App.js
+import React, { useEffect, useState } from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import { createStackNavigator } from '@react-navigation/stack';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from './firebaseConfig';
+
+import LoginScreen from './screens/LoginScreen';
+import SignupScreen from './screens/SignupScreen';
+import HomeScreen from './screens/HomeScreen';
+
+// Import the methods to start/stop tracking:
+import { startLocationTracking, stopLocationTracking } from './LocationTask';
+
+const Stack = createStackNavigator();
+
+export default function App() {
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      setUser(currentUser);
+      
+      if (currentUser) {
+        // Start background location tracking if user logs in
+        await startLocationTracking();
+      } else {
+        // Stop tracking if user logs out
+        await stopLocationTracking();
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  return (
+    <NavigationContainer>
+      <Stack.Navigator>
+        {user ? (
+          // If user is logged in, show HomeScreen
+          <Stack.Screen
+            name="Home"
+            component={HomeScreen}
+            options={{ headerShown: false }}
+          />
+        ) : (
+          // If not logged in, show Login / Signup
+          <>
+            <Stack.Screen
+              name="Login"
+              component={LoginScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="Signup"
+              component={SignupScreen}
+              options={{ headerShown: false }}
+            />
+          </>
+        )}
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+}
+```
+
+screens/HomeScreen.js
+```javascript
+// screens/HomeScreen.js
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { signOut } from 'firebase/auth';
+import { auth, db } from '../firebaseConfig';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import * as Location from 'expo-location';
+
+export default function HomeScreen() {
+  const [foregroundSubscription, setForegroundSubscription] = useState(null);
+  const [currentLocation, setCurrentLocation] = useState(null);
+
+  useEffect(() => {
+    // 1. Check permissions and start tracking once Home screen mounts
+    checkPermissionsAndStartTracking();
+    // Cleanup on unmount
+    return () => {
+      foregroundSubscription?.remove();
+    };
+  }, []);
+
+  const checkPermissionsAndStartTracking = async () => {
+    // Request foreground permission
+    const { status: fgStatus } = await Location.requestForegroundPermissionsAsync();
+    if (fgStatus !== 'granted') {
+      console.log('Foreground location permission not granted');
+      Alert.alert('Error', 'Foreground location permission not granted. Cannot track location.');
+      return;
+    }
+
+    console.log('Permissions granted!');
+
+    // 2. Now that we've handled permission checks, begin foreground tracking
+    startForegroundTracking();
+  };
+
+  const startForegroundTracking = async () => {
+    // Start watching position in the foreground
+    const subscription = await Location.watchPositionAsync(
+      {
+        accuracy: Location.Accuracy.High,
+        distanceInterval: 0,   // or a certain # of meters
+        timeInterval: 10000,   // e.g. 10 seconds in ms
+      },
+      async (location) => {
+        setCurrentLocation(location.coords);
+
+        // Send location to Firestore
+        try {
+          const user = auth.currentUser;
+          if (!user) return;
+
+          await setDoc(
+            doc(db, 'users', user.uid),
+            {
+              location: {
+                latitude: location.coords.latitude,
+                longitude: location.coords.longitude,
+                accuracy: location.coords.accuracy,
+                altitude: location.coords.altitude,
+                heading: location.coords.heading,
+                speed: location.coords.speed,
+              },
+              locationTimestamp: serverTimestamp(),
+            },
+            { merge: true }
+          );
+        } catch (err) {
+          console.log('Error updating Firestore in foreground:', err);
+        }
+      }
+    );
+
+    setForegroundSubscription(subscription);
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      Alert.alert('Error', 'Could not sign out');
+    }
+  };
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Thank you for testing!</Text>
+      {currentLocation ? (
+        <Text style={styles.text}>
+          Foreground location:
+          {'\n'}Lat: {currentLocation.latitude}, Lng: {currentLocation.longitude}
+        </Text>
+      ) : (
+        <Text style={styles.text}>No location yet...</Text>
+      )}
+      <TouchableOpacity style={styles.button} onPress={handleSignOut}>
+        <Text style={styles.buttonText}>Log Out</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+// Basic styles
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#212832',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  title: {
+    fontSize: 28,
+    color: '#fff',
+    marginBottom: 20,
+  },
+  text: {
+    color: '#fff',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  button: {
+    width: 150,
+    height: 50,
+    backgroundColor: '#f54242',
+    borderRadius: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 18,
+  },
+});
+```
+
+screens/LoginScreen.js
+```javascript
+// screens/LoginScreen.js
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  Alert,
+  StyleSheet,
+  KeyboardAvoidingView,
+  ScrollView,
+  Platform,
+} from 'react-native';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '../firebaseConfig';
+
+export default function LoginScreen({ navigation }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
+  const handleLogin = async () => {
+    try {
+      if (!email || !password) {
+        Alert.alert('Error', 'Please fill in all fields');
+        return;
+      }
+
+      await signInWithEmailAndPassword(auth, email.trim(), password);
+      // On success, the user is automatically tracked by `onAuthStateChanged`
+      // in App.js, which navigates them to Home screen
+    } catch (error) {
+      Alert.alert('Login Error', error.message);
+    }
+  };
+
+  return (
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <ScrollView
+        contentContainerStyle={styles.scrollContainer}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.inner}>
+          <Text style={styles.title}>Login</Text>
+
+          <TextInput
+            style={styles.input}
+            placeholder="Email"
+            placeholderTextColor="#999"
+            value={email}
+            onChangeText={(text) => setEmail(text)}
+            keyboardType="email-address"
+            autoCapitalize="none"
+          />
+
+          <TextInput
+            style={styles.input}
+            placeholder="Password"
+            placeholderTextColor="#999"
+            secureTextEntry
+            value={password}
+            onChangeText={(text) => setPassword(text)}
+          />
+
+          <TouchableOpacity style={styles.button} onPress={handleLogin}>
+            <Text style={styles.buttonText}>Log In</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
+            <Text style={{ marginTop: 20, color: '#0275d8' }}>
+              Don’t have an account? Sign up
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+}
+
+const styles = StyleSheet.create({
+  scrollContainer: {
+    flexGrow: 1,
+  },
+  inner: {
+    flex: 1,
+    padding: 20,
+    justifyContent: 'center',
+    backgroundColor: '#212832', // or your preferred background
+  },
+  title: {
+    fontSize: 32,
+    color: '#fff',
+    marginBottom: 30,
+    textAlign: 'center',
+  },
+  input: {
+    width: '100%',
+    height: 50,
+    backgroundColor: '#333',
+    borderRadius: 5,
+    paddingHorizontal: 15,
+    color: '#fff',
+    marginBottom: 15,
+  },
+  button: {
+    height: 50,
+    backgroundColor: '#00ADB5',
+    borderRadius: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 15,
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 18,
+  },
+});
+```
+
+screens/SignupScreen.js
+```javascript
+// SignupScreen.js
+import React, { useState } from 'react';
+import {
+    View,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    Alert,
+    StyleSheet,
+    KeyboardAvoidingView,
+    ScrollView,
+    Platform,
+} from 'react-native';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { auth, db } from '../firebaseConfig';
+
+export default function SignupScreen({ navigation }) {
+    const [firstName, setFirstName] = useState('');
+    const [lastName, setLastName] = useState('');
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+
+    const handleSignup = async () => {
+        try {
+            if (!firstName || !lastName || !email || !password) {
+                Alert.alert('Error', 'Please fill in all fields');
+                return;
+            }
+            const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+            const user = userCredential.user;
+            await setDoc(doc(db, 'users', user.uid), {
+                createdAt: serverTimestamp(),
+                firstName: firstName.trim(),
+                lastName: lastName.trim(),
+                email: email.trim(),
+            });
+            Alert.alert('Success', 'Account created successfully');
+        } catch (error) {
+            Alert.alert('Signup Error', error.message);
+        }
+    };
+
+    return (
+        <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+            <ScrollView
+                contentContainerStyle={styles.scrollContainer}
+                keyboardShouldPersistTaps="handled"
+            >
+                <View style={styles.inner}>
+                    <Text style={styles.title}>Sign Up</Text>
+
+                    <TextInput
+                        style={styles.input}
+                        placeholder="First Name"
+                        placeholderTextColor="#999"
+                        value={firstName}
+                        onChangeText={setFirstName}
+                    />
+                    <TextInput
+                        style={styles.input}
+                        placeholder="Last Name"
+                        placeholderTextColor="#999"
+                        value={lastName}
+                        onChangeText={setLastName}
+                    />
+                    <TextInput
+                        style={styles.input}
+                        placeholder="Email"
+                        placeholderTextColor="#999"
+                        value={email}
+                        onChangeText={setEmail}
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                    />
+                    <TextInput
+                        style={styles.input}
+                        placeholder="Password"
+                        placeholderTextColor="#999"
+                        secureTextEntry
+                        value={password}
+                        onChangeText={setPassword}
+                    />
+
+                    <TouchableOpacity style={styles.button} onPress={handleSignup}>
+                        <Text style={styles.buttonText}>Create Account</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+                        <Text style={{ marginTop: 20, color: '#0275d8' }}>
+                            Already have an account? Log in
+                        </Text>
+                    </TouchableOpacity>
+                </View>
+            </ScrollView>
+        </KeyboardAvoidingView>
+    );
+}
+
+const styles = StyleSheet.create({
+    scrollContainer: {
+        flexGrow: 1,
+    },
+    inner: {
+        flex: 1,
+        padding: 20,
+        justifyContent: 'center',
+    },
+    title: {
+        fontSize: 32,
+        color: '#fff',
+        marginBottom: 30,
+        textAlign: 'center',
+    },
+    input: {
+        width: '100%',
+        height: 50,
+        backgroundColor: '#333',
+        borderRadius: 5,
+        paddingHorizontal: 15,
+        color: '#fff',
+        marginBottom: 15,
+    },
+    button: {
+        height: 50,
+        backgroundColor: '#00ADB5',
+        borderRadius: 5,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: 15,
+    },
+    buttonText: {
+        color: '#fff',
+        fontSize: 18,
+    },
+});
+```
+
+LocationTask.js
+```javascript
+// LocationTask.js
+
+import * as TaskManager from 'expo-task-manager';
+import * as BackgroundFetch from 'expo-background-fetch';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from './firebaseConfig'; // Make sure this points to your db
+import { getAuth } from 'firebase/auth'; // Only if you need currentUser from Firebase
+import * as Location from 'expo-location';
+
+const LOCATION_TRACKING = 'LOCATION_TRACKING';
+
+// 1. Define the background task
+TaskManager.defineTask(LOCATION_TRACKING, async ({ data, error }) => {
+  if (error) {
+    console.error('Location task error:', error);
+    return BackgroundFetch.BackgroundFetchResult.Failed;
+  }
+  
+  if (data) {
+    const { locations } = data;
+    const location = locations[0];
+    if (location) {
+      try {
+        // 2. Get the currently logged in user
+        const auth = getAuth();
+        const user = auth.currentUser; 
+        // If user is logged out, do nothing
+        if (!user) {
+          console.log('No user, skipping location update');
+          return BackgroundFetch.BackgroundFetchResult.NoData;
+        }
+
+        // 3. Send location data to Firestore
+        const userRef = doc(db, 'users', user.uid);
+        await setDoc(
+          userRef,
+          {
+            location: {
+              latitude: location.coords.latitude,
+              longitude: location.coords.longitude,
+              // You can store more data if you need:
+              accuracy: location.coords.accuracy,
+              altitude: location.coords.altitude,
+              heading: location.coords.heading,
+              speed: location.coords.speed
+            },
+            locationTimestamp: serverTimestamp(),
+          },
+          { merge: true }
+        );
+
+        console.log('Background location updated:', location.coords);
+        // Return that we have new data
+        return BackgroundFetch.BackgroundFetchResult.NewData;
+      } catch (e) {
+        console.error('Error updating location in Firestore:', e);
+        return BackgroundFetch.BackgroundFetchResult.Failed;
+      }
+    }
+  }
+
+  // If no data, we return NoData
+  return BackgroundFetch.BackgroundFetchResult.NoData;
+});
+
+export async function startLocationTracking() {
+  console.log('Starting location tracking...');
+  // Request permissions in case they haven't been granted yet:
+  const fgPermission = await Location.requestForegroundPermissionsAsync();
+  if (fgPermission.status !== 'granted') {
+    console.log('Foreground location permission not granted');
+    return;
+  }
+
+  const bgPermission = await Location.requestBackgroundPermissionsAsync();
+  if (bgPermission.status !== 'granted') {
+    console.log('Background location permission not granted');
+    return;
+  }
+
+  // Check if task is already running
+  const hasStarted = await Location.hasStartedLocationUpdatesAsync(LOCATION_TRACKING);
+  if (hasStarted) {
+    console.log('Already started background location updates');
+    return;
+  }
+
+  // Start background location updates
+  await Location.startLocationUpdatesAsync(LOCATION_TRACKING, {
+    accuracy: Location.Accuracy.Balanced,  // or High if you need it
+    // Optionally set the distance or time interval to reduce battery usage
+    timeInterval: 60000, // Minimum time (ms) between updates ~ 1 minute
+    // distanceInterval: 50, // Receive updates only when user moves 50 meters
+    foregroundService: {
+      notificationTitle: 'Location Tracking',
+      notificationBody: 'We are tracking your location in the background',
+      notificationColor: '#fff',
+    },
+    pausesUpdatesAutomatically: false,
+    // On Android, set these to ensure the background service runs:
+    showsBackgroundLocationIndicator: true,
+  });
+
+  // Also register the background fetch so iOS can schedule the task:
+  await BackgroundFetch.registerTaskAsync(LOCATION_TRACKING, {
+    minimumInterval: 60, // 1 minute
+    stopOnTerminate: false,
+    startOnBoot: true,
+  });
+
+  console.log('Background location tracking started');
+}
+
+export async function stopLocationTracking() {
+  console.log('Stopping location tracking...');
+  const hasStarted = await Location.hasStartedLocationUpdatesAsync(LOCATION_TRACKING);
+  if (hasStarted) {
+    await Location.stopLocationUpdatesAsync(LOCATION_TRACKING);
+  }
+  // Unregister as well from background fetch
+  const isRegistered = await TaskManager.isTaskRegisteredAsync(LOCATION_TRACKING);
+  if (isRegistered) {
+    await BackgroundFetch.unregisterTaskAsync(LOCATION_TRACKING);
+  }
+  console.log('Background location tracking stopped');
+}
+```
+
+firebaseConfig.js
+```javascript
+// firebaseConfig.js
+import { initializeApp } from 'firebase/app';
+import { getFirestore } from 'firebase/firestore';
+
+import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Replace with your own Firebase config!
+const firebaseConfig = {
+    apiKey: "AIzaSyAR24CQPymO-X5-6L-JeKRGfyqXm3n8MOs",
+    authDomain: "totob12-loco.firebaseapp.com",
+    projectId: "totob12-loco",
+    storageBucket: "totob12-loco.firebasestorage.app",
+    messagingSenderId: "1079141322842",
+    appId: "1:1079141322842:web:ea9606c2ad097ea3f30863"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+
+// Set up Auth with persistence:
+export const auth = initializeAuth(app, {
+    persistence: getReactNativePersistence(AsyncStorage),
+});
+
+export const db = getFirestore(app);
+```
+
+package.json
+```json
+{
+  "name": "loco",
+  "license": "0BSD",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "expo start --dev-client",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web"
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "1.23.1",
+    "@react-navigation/native": "^7.0.14",
+    "@react-navigation/stack": "^7.1.1",
+    "expo": "~52.0.24",
+    "expo-background-fetch": "~13.0.4",
+    "expo-location": "~18.0.5",
+    "expo-status-bar": "~2.0.0",
+    "expo-task-manager": "~12.0.4",
+    "firebase": "^11.1.0",
+    "react": "18.3.1",
+    "react-native": "0.76.5",
+    "react-native-gesture-handler": "~2.20.2",
+    "react-native-keyboard-aware-scroll-view": "^0.9.5",
+    "react-native-safe-area-context": "4.12.0",
+    "react-native-screens": "~4.4.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.20.0"
+  },
+  "private": true
+}
+```
+
+app.json
+```json
+{
+  "expo": {
+    "name": "loco",
+    "slug": "loco",
+    "version": "0.1.3",
+    "orientation": "portrait",
+    "icon": "./assets/icon.jpg",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#212832"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow this app to access your location even if the app is closed or not in use.",
+          "locationWhenInUsePermission": "Allow this app to access your location when the app is in use.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true
+        }
+      ]
+    ],
+    "ios": {
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "location",
+          "fetch"
+        ]
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#212832"
+      },
+      "icon": "./assets/icon.png",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION"
+      ]
+    },
+    "extra": {
+      "eas": {
+        "projectId": "eacea42d-f4e8-4a94-b43a-f19dc934865e"
+      }
+    }
+  }
+}
+```
+
+In this current setup, the foreground updates work properly, but the app never seems to request background location. I am testing this on an Android Emulator, and I am requested to rgand location usage whilst using the app, but I am never brought to the settings page of the permissions to switch it to "All the time" (as I have been able to successfully do in other projects). How could you fix this? Here is another similar project where it worked fine:
+
+```javascript
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { useEffect, useState, useRef, createContext, useContext } from 'react';
+import { View, Text, TouchableOpacity, TextInput, SafeAreaView, StatusBar, ActivityIndicator, ScrollView, KeyboardAvoidingView, Keyboard, TouchableWithoutFeedback, Platform, Modal, Pressable } from 'react-native';
+import { Avatar, Button, Icon, SearchBar, Chip, ListItem } from '@rneui/themed';
+import MapView, { Marker, AnimatedRegion, PROVIDER_GOOGLE, Callout } from 'react-native-maps';
+import * as Location from 'expo-location';
+import 'react-native-get-random-values';
+import { initializeApp } from 'firebase/app';
+import { getDatabase, ref, onValue, set, update, remove } from 'firebase/database';
+import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
+import { NavigationContainer, useNavigationState } from '@react-navigation/native';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import ViewPager from '@react-native-community/viewpager';
+import * as Linking from 'expo-linking';
+import * as Haptics from 'expo-haptics';
+import * as Clipboard from 'expo-clipboard';
+import * as TaskManager from 'expo-task-manager';
+import debounce from 'lodash.debounce';
+// import * as BackgroundFetch from 'expo-background-fetch';
+import * as Notifications from 'expo-notifications';
+import { generateUsername } from './generateUsername';
+import { customMapStyle, styles } from './Styles';
+import { firebaseConfig } from './firebaseConfig';
+
+const app = initializeApp(firebaseConfig);
+const database = getDatabase(app);
+
+const UsersContext = createContext();
+
+export const LOCATION_TASK_NAME = 'background-location-task';
+
+const debouncedUpdateUserLocation = debounce(async (userRef, coords) => {
+  console.log(`Debounced location update`);
+  await update(userRef, {
+    location: coords,
+    timestamp: Date.now(),
+  });
+}, 4000);
+
+TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
+  if (error) {
+    console.error(error);
+    return;
+  }
+  if (data) {
+    console.log(`Updating location through background`);
+    const { locations } = data;
+    const database = getDatabase();
+    const userId = await AsyncStorage.getItem('userId');
+    const userName = await AsyncStorage.getItem('userName');
+    if (userId && userName && locations && locations.length > 0) {
+      const { latitude, longitude } = locations[0].coords;
+      const userRef = ref(database, `users/${userId}`);
+      debouncedUpdateUserLocation(userRef, locations[0].coords)
+      // await update(userRef, {
+      //   location: locations[0].coords,
+      //   timestamp: Date.now(),
+      // });
+    }
+  }
+});
+
+export const startLocationTracking = async () => {
+  const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
+  if (foregroundStatus !== 'granted') {
+    console.error('Foreground location permission is required');
+    return;
+  }
+
+  const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
+  if (backgroundStatus !== 'granted') {
+    console.error('Background location permission is required');
+    return;
+  }
+
+  console.log('Location permissions granted');
+
+  await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
+    accuracy: Location.Accuracy.High,
+    distanceInterval: 1,
+    timeInterval: 4000,
+    // deferredUpdatesInterval: 1000,
+    foregroundService: {
+      notificationTitle: "Location tracking",
+      notificationBody: "Location tracking is running",
+      notificationColor: "#00ADB5",
+    },
+    pausesUpdatesAutomatically: true,
+    // activityType: Location.ActivityType.Fitness,
+    showsBackgroundLocationIndicator: true,
+  });
+};
+
+const useUsers = () => {
+  const context = useContext(UsersContext);
+  if (!context) {
+    throw new Error('useUsers must be used within a UsersProvider');
+  }
+  return context;
+};
+
+const UsersProvider = ({ children }) => {
+  const [users, setUsers] = useState({});
+  const [currentUserId, setCurrentUserId] = useState('');
+  const [currentUserName, setCurrentUserName] = useState('');
+
+  useEffect(() => {
+    const fetchUsers = () => {
+      const usersRef = ref(database, 'users');
+      onValue(usersRef, (snapshot) => {
+        setUsers(snapshot.val() || {});
+      });
+    };
+
+    const fetchCurrentUser = async () => {
+      const userId = await AsyncStorage.getItem('userId');
+      const userName = await AsyncStorage.getItem('userName');
+      if (userId && userName) {
+        setCurrentUserId(userId);
+        setCurrentUserName(userName);
+      }
+    };
+
+    fetchUsers();
+    fetchCurrentUser();
+  }, []);
+
+  const updateUser = (userId, data) => {
+    const userRef = ref(database, `users/${userId}`);
+    console.log(data);
+    update(userRef, data);
+  };
+
+  const value = {
+    users,
+    currentUserId,
+    currentUserName,
+    setCurrentUserId,
+    setCurrentUserName,
+    updateUser,
+  };
+
+  return <UsersContext.Provider value={value}>{children}</UsersContext.Provider>;
+};
+
+const generateUuid = () => {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+    var r = (Math.random() * 16) | 0,
+      v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+};
+
+const generateUuidAndSave = async () => {
+  const existingUuid = await AsyncStorage.getItem('userId');
+  if (!existingUuid) {
+    const uuid = generateUuid();
+    await AsyncStorage.setItem('userId', uuid);
+    return uuid;
+  }
+  return existingUuid;
+};
+
+const Tab = createBottomTabNavigator();
+
+const Header = () => {
+  return (
+    <SafeAreaView style={styles.headerContainer}></SafeAreaView>
+  );
+};
+
+const UserAvatarMarker = ({ user, size, color }) => {
+  const getTwoFirstLetters = (name) => {
+    if (!name) {
+      return 'NA';
+    }
+    return name.substring(0, 2).toUpperCase();
+  };
+
+  if (!user) {
+    return null;
+  }
+
+  return (
+    <Avatar
+      size={size || 30}
+      rounded
+      title={getTwoFirstLetters(user.name || 'NA')}
+      containerStyle={{ backgroundColor: color || '#FFFFFF' }}
+      titleStyle={{ color: 'black' }}
+      source={{ uri: "data:image/png" }}
+    />
+  );
+};
+
+// Haversine formula
+const getDistanceFromLatLonInKm = (lat1, lon1, lat2, lon2) => {
+  if (!lat1 || !lon1 || !lat2 || !lon2) {
+    return Infinity;
+  }
+  const R = 6371;
+  const dLat = deg2rad(lat2 - lat1);
+  const dLon = deg2rad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
+
+const deg2rad = (deg) => {
+  return deg * (Math.PI / 180);
+};
+
+const formatTimeAgo = (timestamp) => {
+  const now = Date.now();
+  const diff = now - timestamp;
+
+  const seconds = Math.floor(diff / 1000);
+  if (seconds < 60) return `${seconds} seconds ago`;
+
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} minutes ago`;
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hours ago`;
+
+  const days = Math.floor(hours / 24);
+  return `${days} days ago`;
+};
+
+const OnboardingScreen = ({ onFinish }) => {
+  const pagerRef = useRef(null);
+  const [username, setUsername] = useState(generateUsername('-', 3));
+
+  const finishSetup = async () => {
+    const userId = await generateUuidAndSave();
+    await AsyncStorage.setItem('userName', username);
+    await set(ref(database, `users/${userId}`), {
+      id: userId,
+      name: username,
+      location: null,
+      timestamp: Date.now(),
+      friends: {},
+      requests: {}
+    });
+    onFinish(username, userId);
+  };
+
+  return (
+    <ViewPager style={{ flex: 1 }} ref={pagerRef}>
+      <View key="1" style={styles.onboardingPage}>
+        <Text style={styles.onboardingTitle}>Welcome to Loco</Text>
+        <FontAwesome6 name="earth-americas" size={100} color="white" />
+        <TouchableOpacity onPress={() => pagerRef.current.setPage(1)} style={styles.onboardingButton}>
+          <Text style={styles.onboardingButtonText}>Next</Text>
+        </TouchableOpacity>
+      </View>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <View key="2" style={styles.onboardingPage}>
+          <Text style={styles.onboardingTitle}>Choose Your Name</Text>
+          <TextInput
+            style={styles.onboardingInput}
+            onChangeText={setUsername}
+            value={username}
+            placeholder="Enter your username"
+            placeholderTextColor="#CCCCCC"
+          />
+          <TouchableOpacity onPress={() => pagerRef.current.setPage(2)} style={styles.onboardingButton}>
+            <Text style={styles.onboardingButtonText}>Save</Text>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
+      <View key="3" style={styles.onboardingPage}>
+        <Text style={styles.onboardingTitle}>Let's Get Started</Text>
+        <FontAwesome6 name="globe" size={100} color="white" />
+        <TouchableOpacity onPress={finishSetup} style={styles.onboardingButton}>
+          <Text style={styles.onboardingButtonText}>Finish Setup</Text>
+        </TouchableOpacity>
+      </View>
+    </ViewPager>
+  );
+};
+
+const UserDialog = ({ isVisible, onClose, user }) => {
+  const { currentUserId, users, updateUser } = useUsers();
+  if (!user) return null;
+
+  const isCurrentUser = user.id === currentUserId;
+  const isFriend = users[currentUserId]?.friends?.[user.id];
+  const hasSentRequest = users[user.id]?.requests?.[currentUserId];
+
+  const handleFriendButtonPress = async () => {
+    if (isFriend) {
+      await removeFriend(user.id);
+    } else {
+      await toggleFriendRequest(user.id);
+    }
+    // close on Friend page, not on Map page
+    onClose();
+  };
+
+  const handleCopyAddress = () => {
+    console.log("Copy address pressed");
+  };
+
+  const handleCopyCoordinates = () => {
+    console.log("Copy coordinates pressed");
+    Clipboard.setStringAsync(`${user.location.latitude}, ${user.location.longitude}`);
+  };
+
+  const handleSetDirections = () => {
+    if (user.location) {
+      const url = `http://maps.google.com/?q=${user.location.latitude},${user.location.longitude}`;
+      Linking.openURL(url);
+    } else {
+      console.log("User location is not available.");
+    }
+  };
+
+  const removeFriend = async (friendId) => {
+    if (!currentUserId) {
+      console.log('User ID is not set');
+      return;
+    }
+
+    const currentUserRef = ref(database, `users/${currentUserId}`);
+    const friendUserRef = ref(database, `users/${friendId}`);
+
+    await update(currentUserRef, {
+      [`friends/${friendId}`]: null,
+    });
+    await update(friendUserRef, {
+      [`friends/${currentUserId}`]: null,
+    });
+
+    console.log(`Removed friend ${friendId}`);
+  };
+
+  const toggleFriendRequest = async (receiverId) => {
+    if (!currentUserId) {
+      console.log('User ID is not set');
+      return;
+    }
+
+    const requestsRef = ref(database, `users/${receiverId}/requests/${currentUserId}`);
+    onValue(requestsRef, async (snapshot) => {
+      if (snapshot.exists()) {
+        await set(requestsRef, null);
+        console.log('Friend request removed.');
+      } else {
+        await set(requestsRef, true);
+        console.log('Friend request sent!');
+      }
+    }, {
+      onlyOnce: true,
+    });
+  };
+
+  return (
+    <Modal
+      animationType="slide"
+      transparent={true}
+      visible={isVisible}
+      onRequestClose={onClose}
+      onDismiss={onClose}
+    >
+      <Pressable style={styles.centeredView} onPress={onClose}>
+        <View style={styles.modalView}>
+          <Text style={styles.modalText}>{!isCurrentUser ? user.name : "You"}</Text>
+          {!isCurrentUser && (
+            <>
+              <Button
+                title={isFriend ? "Remove friend" : hasSentRequest ? "Cancel friend request" : "Send friend request"}
+                onPress={handleFriendButtonPress}
+                buttonStyle={styles.dialogButton}
+                titleStyle={styles.dialogButtonTitle}
+              />
+            </>
+          )}
+          <Button
+            title="Copy address"
+            onPress={handleCopyAddress}
+            buttonStyle={styles.dialogButton}
+            titleStyle={styles.dialogButtonTitle}
+          />
+          <Button
+            title="Copy coordinates"
+            onPress={handleCopyCoordinates}
+            buttonStyle={styles.dialogButton}
+            titleStyle={styles.dialogButtonTitle}
+          />
+          {!isCurrentUser && (
+            <>
+              <Button
+                title="Set directions"
+                onPress={handleSetDirections}
+                buttonStyle={styles.dialogButton}
+                titleStyle={styles.dialogButtonTitle}
+              />
+            </>
+          )}
+        </View>
+      </Pressable>
+    </Modal>
+  );
+};
+
+const MapScreen = ({ searchBarRef }) => {
+  const mapRef = useRef(null);
+  const [location, setLocation] = useState(null);
+  const [initialRegionSet, setInitialRegionSet] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchActive, setSearchActive] = useState(false);
+  const [dialogVisible, setDialogVisible] = useState(false);
+  const [dialogUser, setDialogUser] = useState(null);
+  const [filter, setFilter] = useState('All');
+
+  const { users, currentUserId, currentUserName, updateUser } = useUsers();
+
+  const sortedUsers = React.useMemo(() => {
+    const query = searchQuery.toLowerCase();
+    return Object.entries(users)
+      .map(([id, user]) => ({
+        id,
+        ...user,
+        distance: location ? getDistanceFromLatLonInKm(
+          location.latitude,
+          location.longitude,
+          user.location?.latitude,
+          user.location?.longitude
+        ) : Infinity,
+      }))
+      .filter(user => user.id !== currentUserId && user.name.toLowerCase().includes(query))
+      .sort((a, b) => a.distance - b.distance);
+  }, [users, location, currentUserId, searchQuery, filter]);
+
+  useEffect(() => {
+    const initLocationTracking = async () => {
+      let { status: foreStatus } = await Location.requestForegroundPermissionsAsync();
+      let { status: backStatus } = await Location.requestBackgroundPermissionsAsync();
+      if (foreStatus !== 'granted' || backStatus !== 'granted') {
+        console.error('Permission to access location was denied');
+        return;
+      }
+
+      let currentLocation = await Location.getCurrentPositionAsync({});
+      if (currentLocation && currentLocation.coords) {
+        setLocation(currentLocation.coords);
+        setInitialRegionSet(true);
+
+        if (currentUserId && currentUserName) {
+          const userRef = ref(database, `users/${currentUserId}`);
+          update(userRef, {
+            id: currentUserId,
+            name: currentUserName,
+            location: currentLocation.coords,
+            timestamp: Date.now(),
+          });
+
+          Location.watchPositionAsync({
+            accuracy: Location.Accuracy.High,
+            distanceInterval: 1,
+          }, (newLocation) => {
+            setLocation(newLocation.coords);
+            debouncedUpdateUserLocation(userRef, newLocation.coords);
+            console.log(`Updating location through foreground`);
+            // updateUser(currentUserId, { location: newLocation.coords, timestamp: Date.now() });
+          }).then((watcher) => {
+            return () => watcher.remove();
+          });
+        }
+      }
+    };
+
+    initLocationTracking();
+  }, [currentUserId, currentUserName]);
+
+  const handleSearch = (query) => {
+    setSearchQuery(query);
+  };
+
+  const handleMapAllPress = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setFilter('All');
+  };
+
+  const handleMapFriendsPress = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setFilter(filter === 'Friends' ? 'All' : 'Friends');
+  };
+
+  const handleCalloutPress = (user) => {
+    console.log('Callout pressed:', user.name);
+    setDialogUser(user);
+    setDialogVisible(true);
+  };
+
+  const renderCalloutContent = (user) => {
+    if (!user || !user.location || !user.location.latitude || !user.location.longitude) {
+      return null;
+    }
+
+    const isCurrentUser = user.id === currentUserId;
+    const distance = location && user.location
+      ? getDistanceFromLatLonInKm(
+        location.latitude,
+        location.longitude,
+        user.location.latitude,
+        user.location.longitude
+      ).toFixed(2)
+      : 'Unknown';
+    const timeAgo = user.timestamp ? formatTimeAgo(user.timestamp) : 'Unknown';
+
+    return (
+      <Callout onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); handleCalloutPress(user); }} >
+        <View style={[styles.card]}>
+          <Avatar
+            size={25}
+            rounded
+            title={user.name.substring(0, 2).toUpperCase()}
+            containerStyle={styles.avatar}
+            source={{ uri: "data:image/png" }}
+          />
+          <View style={styles.info}>
+            <Text style={styles.name}>{user.name}</Text>
+            {!isCurrentUser && (
+              <>
+                <Text style={styles.details}>{distance} km away</Text>
+                <Text style={styles.details}>{timeAgo}</Text>
+              </>
+            )}
+          </View>
+          <View style={styles.userOptions}>
+            <Icon name="dots-three-vertical" type="entypo" color="black" size={20} />
+          </View>
+        </View>
+      </Callout>
+    );
+  };
+
+  const toggleFriendRequest = async (receiverId) => {
+    if (!currentUserId) {
+      console.log('User ID is not set');
+      return;
+    }
+
+    const requestsRef = ref(database, `users/${receiverId}/requests/${currentUserId}`);
+    onValue(requestsRef, async (snapshot) => {
+      if (snapshot.exists()) {
+        await set(requestsRef, null);
+        console.log('Friend request removed.');
+      } else {
+        await set(requestsRef, true);
+        console.log('Friend request sent!');
+      }
+    }, {
+      onlyOnce: true,
+    });
+  };
+
+  const removeFriend = async (friendId) => {
+    if (!currentUserId) {
+      console.log('User ID is not set');
+      return;
+    }
+
+    const currentUserRef = ref(database, `users/${currentUserId}`);
+    const friendUserRef = ref(database, `users/${friendId}`);
+
+    await update(currentUserRef, {
+      [`friends/${friendId}`]: null,
+    });
+    await update(friendUserRef, {
+      [`friends/${currentUserId}`]: null,
+    });
+
+    console.log(`Removed friend ${friendId}`);
+  };
+
+  const recenterMap = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (location && mapRef.current) {
+      mapRef.current.animateToRegion({
+        latitude: location.latitude,
+        longitude: location.longitude,
+        latitudeDelta: 0.0922,
+        longitudeDelta: 0.0421,
+      }, 500);
+    }
+  };
+
+  const zoomToUserLocation = (location, isFriend) => {
+    setSearchQuery('');
+    setSearchActive(false);
+    Keyboard.dismiss();
+    if (!isFriend) {
+      setFilter('All');
+    }
+    if (mapRef.current && location) {
+      mapRef.current.animateToRegion({
+        latitude: location.latitude,
+        longitude: location.longitude,
+        latitudeDelta: 0.005,
+        longitudeDelta: 0.005,
+      }, 1000);
+    }
+  };
+
+  const closeSearch = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    searchBarRef.current.blur();
+    setSearchActive(false);
+    setSearchQuery('');
+  };
+
+  return (
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <View style={{ flex: 1 }}>
+          <Header />
+          <View style={styles.filterContainer}>
+            {searchActive && (
+              <Button
+                type="solid"
+                icon={{
+                  name: 'chevron-left',
+                  type: 'font-awesome',
+                  size: 20,
+                  color: 'black',
+                }}
+                onPress={closeSearch}
+                buttonStyle={styles.closeButtonStyle}
+                containerStyle={styles.closeButtonContainer}
+              />
+            )}
+            <SearchBar
+              platform="default"
+              placeholder="Search for users..."
+              onChangeText={handleSearch}
+              value={searchQuery}
+              onFocus={() => { setSearchActive(true); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light) }}
+              ref={searchBarRef}
+              containerStyle={[
+                styles.searchContainerStyle,
+                { marginLeft: searchActive ? 60 : 0, flex: searchActive ? 1 : 0 },
+              ]}
+              inputContainerStyle={styles.searchInputContainerStyle}
+              inputStyle={styles.searchInputStyle}
+              round
+            />
+            <View style={styles.chipsContainer}>
+              <Chip
+                title="All"
+                icon={{
+                  name: 'globe',
+                  type: 'font-awesome',
+                  size: 17,
+                }}
+                titleStyle={{ color: 'black' }}
+                onPress={handleMapAllPress}
+                type="solid"
+                containerStyle={styles.chipContainerStyle}
+                buttonStyle={[styles.chipStyle, filter === 'All' && styles.selectedChipStyle]}
+              />
+              <Chip
+                title="Friends"
+                icon={{
+                  name: 'users',
+                  type: 'font-awesome',
+                  size: 17,
+                }}
+                titleStyle={{ color: 'black' }}
+                onPress={handleMapFriendsPress}
+                type="solid"
+                containerStyle={styles.chipContainerStyle}
+                buttonStyle={[styles.chipStyle, filter === 'Friends' && styles.selectedChipStyle]}
+              />
+            </View>
+          </View>
+          {(searchActive || searchQuery) && (
+            <View style={styles.searchResultsContainer}>
+              {sortedUsers.length === 0 ? (
+                <View style={styles.noUserFoundContainer}>
+                  <Text style={styles.noUserFoundText}>No user found</Text>
+                </View>
+              ) : (
+                <ScrollView keyboardShouldPersistTaps='handled'>
+                  {sortedUsers.map((user) => {
+                    const isFriend = users[currentUserId]?.friends?.[user.id];
+                    return (
+                      <ListItem
+                        key={user.id}
+                        bottomDivider
+                        onPress={() => zoomToUserLocation(user.location, isFriend)}
+                      >
+                        <UserAvatarMarker user={user} size={30} color="#00ADB5" />
+                        <ListItem.Content>
+                          <ListItem.Title>{user.name}</ListItem.Title>
+                          <ListItem.Subtitle>{user.distance.toFixed(2)} km away</ListItem.Subtitle>
+                        </ListItem.Content>
+                        <Button
+                          type="clear"
+                          icon={{
+                            name: isFriend ? 'user-times' : user.requests && user.requests[currentUserId] ? 'check' : 'user-plus',
+                            type: 'font-awesome',
+                            size: 25,
+                            color: isFriend ? 'red' : user.requests && user.requests[currentUserId] ? 'green' : '#222831',
+                          }}
+                          onPress={() => isFriend ? removeFriend(user.id) : toggleFriendRequest(user.id)}
+                        />
+                      </ListItem>
+                    );
+                  })}
+                </ScrollView>
+              )}
+            </View>
+          )}
+          <MapView
+            ref={mapRef}
+            provider={PROVIDER_GOOGLE}
+            style={styles.map}
+            initialRegion={location ? {
+              latitude: location.latitude,
+              longitude: location.longitude,
+              latitudeDelta: 0.0922,
+              longitudeDelta: 0.0421,
+            } : undefined}
+            onMapReady={() => {
+              if (location && !initialRegionSet) {
+                setInitialRegionSet(true);
+                mapRef.current.animateToRegion({
+                  latitude: location.latitude,
+                  longitude: location.longitude,
+                  latitudeDelta: 0.0922,
+                  longitudeDelta: 0.0421,
+                }, 500);
+              };
+            }}
+            onRegionChange={() => {
+            }}
+            customMapStyle={customMapStyle}
+          >
+            {location && location.latitude && location.longitude && (
+              <Marker.Animated
+                key={currentUserId}
+                anchor={{ x: 0.5, y: 0.5 }}
+                coordinate={new AnimatedRegion({
+                  latitude: location.latitude,
+                  longitude: location.longitude,
+                  latitudeDelta: 0.0922,
+                  longitudeDelta: 0.0421,
+                })}
+                title="You"
+              >
+                <UserAvatarMarker user={{ name: currentUserName || 'NA' }} color="#00ADB5" />
+                {renderCalloutContent({ id: currentUserId, name: currentUserName, location })}
+              </Marker.Animated>
+            )}
+            {Object.entries(users)
+              .filter(([id, user]) =>
+                id !== currentUserId &&
+                user &&
+                user.location &&
+                user.location.latitude &&
+                user.location.longitude &&
+                (filter === 'All' || (filter === 'Friends' && users[currentUserId]?.friends?.[id]))
+              )
+              .map(([id, user]) => (
+                <Marker.Animated
+                  key={id}
+                  anchor={{ x: 0.5, y: 0.5 }}
+                  coordinate={new AnimatedRegion({
+                    latitude: user.location.latitude,
+                    longitude: user.location.longitude,
+                    latitudeDelta: 0.0922,
+                    longitudeDelta: 0.0421,
+                  })}
+                  title={user.name || 'Anonymous'}
+                >
+                  <UserAvatarMarker user={{ name: user.name || 'NA' }} />
+                  {renderCalloutContent(user)}
+                </Marker.Animated>
+              ))
+            }
+          </MapView>
+          <Button
+            buttonStyle={[styles.recenterButton, null]}
+            containerStyle={styles.recenterButtonContainer}
+            icon={
+              <Icon
+                name="location-arrow"
+                type="font-awesome"
+                size={25}
+                color={'#00ADB5'}
+              />
+            }
+            onPress={() => recenterMap()}
+          />
+        </View>
+        <UserDialog
+          isVisible={dialogVisible}
+          onClose={() => setDialogVisible(false)}
+          user={dialogUser}
+        />
+      </KeyboardAvoidingView>
+    </TouchableWithoutFeedback>
+  );
+};
+
+const App = () => {
+  const [showOnboarding, setShowOnboarding] = useState(null);
+  const { currentUserName, currentUserId, setCurrentUserName, setCurrentUserId } = useUsers();
+  const searchBarRef = useRef(null);
+
+  const focusSearchBar = () => {
+    if (searchBarRef.current) {
+      searchBarRef.current.focus();
+    }
+  };
+
+  useEffect(() => {
+    const checkUserData = async () => {
+      try {
+        const storedUserName = await AsyncStorage.getItem('userName');
+        const storedUserId = await AsyncStorage.getItem('userId');
+        if (storedUserId && storedUserName) {
+          setCurrentUserId(storedUserId);
+          setCurrentUserName(storedUserName);
+          setShowOnboarding(false);
+          await startLocationTracking();
+        } else {
+          setShowOnboarding(true);
+        }
+      } catch (error) {
+        console.error('Error fetching user data:', error);
+      }
+    };
+
+    checkUserData();
+
+    Notifications.requestPermissionsAsync();
+
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: false,
+        shouldSetBadge: false,
+      }),
+    });
+
+    // return () => {
+    //   TaskManager.unregisterAllTasksAsync();
+    // };
+  }, []);
+
+  const handleFinishOnboarding = (username, userId) => {
+    // const userRef = ref(database, `users/${userId}`);
+    // set(userRef, {
+    //   id: userId,
+    // });
+    setCurrentUserName(username);
+    setCurrentUserId(userId);
+    setShowOnboarding(false);
+  };
+
+  if (showOnboarding) {
+    return <OnboardingScreen onFinish={handleFinishOnboarding} />;
+  }
+
+  return (
+    <NavigationContainer>
+      <Tab.Navigator
+        screenOptions={{
+          headerShown: false,
+          tabBarActiveTintColor: '#00ADB5',
+          tabBarInactiveTintColor: '#EEEEEE',
+          tabBarStyle: styles.bottomNavBar,
+        }}
+      >
+        <Tab.Screen
+          name="Map"
+          options={{
+            tabBarIcon: ({ color, size }) => (
+              <FontAwesome6 name="earth-americas" size={size} color={color} />
+            ),
+          }}
+        >
+          {(props) => <MapScreen {...props} searchBarRef={searchBarRef} />}
+        </Tab.Screen>
+        <Tab.Screen
+          name="Friends"
+          options={{
+            tabBarIcon: ({ color, size }) => (
+              <FontAwesome6 name="users" size={size} color={color} />
+            ),
+          }}
+        >
+          {(props) => <FriendsScreen {...props} focusSearchBar={focusSearchBar} />}
+        </Tab.Screen>
+        <Tab.Screen
+          name="You"
+          component={YouScreen}
+          options={{
+            tabBarIcon: ({ color, size }) => (
+              <UserAvatarMarker user={{ name: currentUserName }} size={size} />
+            ),
+          }}
+        />
+      </Tab.Navigator>
+      <StatusBar barStyle="light-content" />
+    </NavigationContainer>
+  );
+};
+
+export default function Root() {
+  return (
+    <UsersProvider>
+      <App />
+    </UsersProvider>
+  );
+}
+```

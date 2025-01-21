@@ -1,0 +1,12 @@
+eas build --profile development --platform android
+eas build:run -p android
+
+eas build:configure
+
+eas build --platform android --profile preview
+eas build --platform ios
+eas build --platform all
+
+eas submit --platform ios
+
+java -jar bundletool.jar build-apks --bundle=loco.aab --output=loco.apks --mode=universal
