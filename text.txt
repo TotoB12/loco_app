@@ -85,44 +85,38 @@ export default function HomeScreen() {
   const [currentLocation, setCurrentLocation] = useState(null);
 
   useEffect(() => {
-    // 1. Check permissions and start tracking once Home screen mounts
-    checkPermissionsAndStartTracking();
+    // Start foreground updates when this screen mounts
+    startForegroundTracking();
     // Cleanup on unmount
     return () => {
       foregroundSubscription?.remove();
     };
   }, []);
 
-  const checkPermissionsAndStartTracking = async () => {
-    // Request foreground permission
-    const { status: fgStatus } = await Location.requestForegroundPermissionsAsync();
-    if (fgStatus !== 'granted') {
-      console.log('Foreground location permission not granted');
-      Alert.alert('Error', 'Foreground location permission not granted. Cannot track location.');
+  const startForegroundTracking = async () => {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Error', 'Foreground location permission not granted');
       return;
     }
 
-    console.log('Permissions granted!');
+    console.log('Starting foreground location updates...');
 
-    // 2. Now that we've handled permission checks, begin foreground tracking
-    startForegroundTracking();
-  };
-
-  const startForegroundTracking = async () => {
-    // Start watching position in the foreground
     const subscription = await Location.watchPositionAsync(
       {
         accuracy: Location.Accuracy.High,
-        distanceInterval: 0,   // or a certain # of meters
-        timeInterval: 10000,   // e.g. 10 seconds in ms
+        distanceInterval: 0,   // or set a number of meters
+        timeInterval: 10000,   // or set in ms, ~10 seconds
       },
       async (location) => {
+        console.log('Foreground location updated:', location.coords);
         setCurrentLocation(location.coords);
 
-        // Send location to Firestore
         try {
           const user = auth.currentUser;
-          if (!user) return;
+          if (!user) return; // if somehow user is null, skip
+
+          console.log('Updating Firestore with foreground location...');
 
           await setDoc(
             doc(db, 'users', user.uid),
@@ -161,7 +155,7 @@ export default function HomeScreen() {
       <Text style={styles.title}>Thank you for testing!</Text>
       {currentLocation ? (
         <Text style={styles.text}>
-          Foreground location:
+          Foreground location: 
           {'\n'}Lat: {currentLocation.latitude}, Lng: {currentLocation.longitude}
         </Text>
       ) : (
@@ -190,7 +184,7 @@ const styles = StyleSheet.create({
   text: {
     color: '#fff',
     marginBottom: 20,
-    textAlign: 'center',
+    textAlign: 'center'
   },
   button: {
     width: 150,
@@ -652,6 +646,7 @@ package.json
     "@react-navigation/stack": "^7.1.1",
     "expo": "~52.0.24",
     "expo-background-fetch": "~13.0.4",
+    "expo-dev-client": "~5.0.9",
     "expo-location": "~18.0.5",
     "expo-status-bar": "~2.0.0",
     "expo-task-manager": "~12.0.4",
@@ -730,930 +725,605 @@ app.json
 }
 ```
 
-In this current setup, the foreground updates work properly, but the app never seems to request background location. I am testing this on an Android Emulator, and I am requested to rgand location usage whilst using the app, but I am never brought to the settings page of the permissions to switch it to "All the time" (as I have been able to successfully do in other projects). How could you fix this? Here is another similar project where it worked fine:
+In this current setup, the foreground updates work properly, but the app never seems to request background location. I am testing this on a development build, and a full build; I have also given the app all the required persmission: use the background while in use, and all the time.
+I want you to go over all the code, and determine the issue and possible fixes. To help you, I have found online an article, and sample scripts for similar apps:
 
-```javascript
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { useEffect, useState, useRef, createContext, useContext } from 'react';
-import { View, Text, TouchableOpacity, TextInput, SafeAreaView, StatusBar, ActivityIndicator, ScrollView, KeyboardAvoidingView, Keyboard, TouchableWithoutFeedback, Platform, Modal, Pressable } from 'react-native';
-import { Avatar, Button, Icon, SearchBar, Chip, ListItem } from '@rneui/themed';
-import MapView, { Marker, AnimatedRegion, PROVIDER_GOOGLE, Callout } from 'react-native-maps';
-import * as Location from 'expo-location';
-import 'react-native-get-random-values';
-import { initializeApp } from 'firebase/app';
-import { getDatabase, ref, onValue, set, update, remove } from 'firebase/database';
-import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
-import { NavigationContainer, useNavigationState } from '@react-navigation/native';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import ViewPager from '@react-native-community/viewpager';
-import * as Linking from 'expo-linking';
-import * as Haptics from 'expo-haptics';
-import * as Clipboard from 'expo-clipboard';
-import * as TaskManager from 'expo-task-manager';
-import debounce from 'lodash.debounce';
-// import * as BackgroundFetch from 'expo-background-fetch';
-import * as Notifications from 'expo-notifications';
-import { generateUsername } from './generateUsername';
-import { customMapStyle, styles } from './Styles';
-import { firebaseConfig } from './firebaseConfig';
+Location tracking in Expo and React Native
 
-const app = initializeApp(firebaseConfig);
-const database = getDatabase(app);
+```
+Location tracking in Expo and React Native
+December 27, 2021
 
-const UsersContext = createContext();
+In recent years, on-demand services such as taxi and food delivery apps have become very popular and useful. One of the features behind this success, besides many other factors, is the real-time position tracking of their users.
 
-export const LOCATION_TASK_NAME = 'background-location-task';
+In this guide, we’ll explain how to track position in React Native even if the app is in the background, using two packages expo-location and expo-task-manager.
 
-const debouncedUpdateUserLocation = debounce(async (userRef, coords) => {
-  console.log(`Debounced location update`);
-  await update(userRef, {
-    location: coords,
-    timestamp: Date.now(),
-  });
-}, 4000);
+Getting started
+💡 If you’re new to React Native, this example will get you started quickly with Expo.
 
-TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
+To use the expo-location package, it must first be installed.
+
+$ expo install expo-location
+If you’re in a bare React Native project, you should also follow these additional installation instructions.
+
+Then we import the package in our app:
+
+import * as Location from "expo-location"
+User location data is considered sensitive information, that’s why we need to ask permission otherwise, tracking won’t even start.
+
+const foregroundPermission = await Location.requestForegroundPermissionsAsync()
+Executing Location.requestForegroundPermissionsAsync() will display permission modal to the user and the foregroundPermission object varies depending on user action, it will have a key granted with the value true or false.
+
+Then we use Location.watchPositionAsync(options, callback) to track the location when the app is in use.
+
+👉 Check all available options here: https://docs.expo.dev/versions/latest/sdk/location/#locationoptions
+
+👉 Callback is a function with location param that has coords with the following format: https://docs.expo.dev/versions/latest/sdk/location/#locationobjectcoords
+
+// Location subscription in the global scope
+let locationSubscrition = null
+
+// Locatoin tracking inside the component
+if (foregroundPermission.granted) {
+  foregroundSubscrition = Location.watchPositionAsync(
+    {
+      // Tracking options
+      accuracy: Location.Accuracy.High,
+      distanceInterval: 10,
+    },
+    location => {
+      /* Location object example:
+        {
+          coords: {
+            accuracy: 20.100000381469727,
+            altitude: 61.80000305175781,
+            altitudeAccuracy: 1.3333333730697632,
+            heading: 288.87445068359375,
+            latitude: 36.7384213,
+            longitude: 3.3463877,
+            speed: 0.051263172179460526,
+          },
+          mocked: false,
+          timestamp: 1640286855545,
+        };
+      */
+      // Do something with location...
+    }
+  )
+}
+Then if we want to stop the location tracking we call the subscriber remove method this way:
+
+locationSubscrition?.remove()
+Location tracking in the background
+The previous explanation only shows how to track the foreground location, once the user switches to another app or locks their phone, the location tracking stops.
+
+To enable position tracking in the background we need to add some configurations to our app.config.json file.
+
+👉 In a bare React Native project check Task manager documentation.
+
+Android permissions will be added automatically when the app is in use, but it’s better to specify all permissions before sending the app to the store.
+
+Here’s config I use:
+
+{
+  "expo": {
+    ...
+    "ios": {
+      ...
+      "infoPlist": {
+        ...
+        "UIBackgroundModes": [
+          "location",
+          "fetch"
+        ]
+      }
+    },
+		"android": {
+	    ...
+	    "permissions": [
+				...
+	      'ACCESS_BACKGROUND_LOCATION'
+	    ]
+	  }
+	}
+}
+Before we track position in background we need to get permission in both foreground and background:
+
+if (!foregroundPermission.granted) return
+const backgroundPermission = await Location.getBackgroundPermissionsAsync()
+Then we will use Location.startLocationUpdatesAsync, but this method requires a task working in the background, that’s why we need to install expo-task-manager.
+
+$ expo install expo-task-manager
+After installing and configuring the task manager, we need to define the location tracking task in the global scope:
+
+Import the task manager:
+
+import * as TaskManager from "expo-task-manager"
+Here’s how to define the task globally:
+
+const TASK_NAME = "BACKGROUND_LOCATION_TASK"
+
+TaskManager.defineTask(TASK_NAME, async ({ data, error }) => {
   if (error) {
     console.error(error);
     return;
   }
   if (data) {
-    console.log(`Updating location through background`);
+		/* Data object example:
+      {
+        locations: [
+          {
+            coords: {
+              accuracy: 22.5,
+              altitude: 61.80000305175781,
+              altitudeAccuracy: 1.3333333730697632,
+              heading: 0,
+              latitude: 36.7384187,
+              longitude: 3.3464008,
+              speed: 0,
+            },
+            timestamp: 1640286402303,
+          },
+        ],
+      };
+    */
     const { locations } = data;
-    const database = getDatabase();
-    const userId = await AsyncStorage.getItem('userId');
-    const userName = await AsyncStorage.getItem('userName');
-    if (userId && userName && locations && locations.length > 0) {
-      const { latitude, longitude } = locations[0].coords;
-      const userRef = ref(database, `users/${userId}`);
-      debouncedUpdateUserLocation(userRef, locations[0].coords)
-      // await update(userRef, {
-      //   location: locations[0].coords,
-      //   timestamp: Date.now(),
-      // });
+    const location = locations[0];
+
+    if (location) {
+      // Do something with location...
     }
   }
 });
 
-export const startLocationTracking = async () => {
-  const { status: foregroundStatus } = await Location.requestForegroundPermissionsAsync();
-  if (foregroundStatus !== 'granted') {
-    console.error('Foreground location permission is required');
-    return;
-  }
+export default function App() {...}
+Inside the app or any child component, we call Location.startLocationUpdatesAsync(taskName, options) method, this latter will trigger the defined task and run the callback.
 
-  const { status: backgroundStatus } = await Location.requestBackgroundPermissionsAsync();
-  if (backgroundStatus !== 'granted') {
-    console.error('Background location permission is required');
-    return;
-  }
+👉 All available options: https://docs.expo.dev/versions/latest/sdk/location/#locationtaskoptions
 
-  console.log('Location permissions granted');
-
-  await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
-    accuracy: Location.Accuracy.High,
-    distanceInterval: 1,
-    timeInterval: 4000,
-    // deferredUpdatesInterval: 1000,
-    foregroundService: {
-      notificationTitle: "Location tracking",
-      notificationBody: "Location tracking is running",
-      notificationColor: "#00ADB5",
-    },
-    pausesUpdatesAutomatically: true,
-    // activityType: Location.ActivityType.Fitness,
+if (backgroundPermission.status === "granted") {
+  Location.startLocationUpdatesAsync(TASK_NAME, {
+    // The following notification options will help keep tracking consistent
     showsBackgroundLocationIndicator: true,
-  });
-};
+    foregroundService: {
+      notificationTitle: "Location",
+      notificationBody: "Location tracking in background",
+      notificationColor: "#fff",
+    },
+  })
+}
+Let’s not forget to stop the location tracking, for example if the user logs out, just by calling the following method:
 
-const useUsers = () => {
-  const context = useContext(UsersContext);
-  if (!context) {
-    throw new Error('useUsers must be used within a UsersProvider');
+Location.stopLocationUpdatesAsync(TASK_NAME)
+Example
+The following example will clarify the tracking process.
+
+The app will show four buttons to start and stop location tracking when the app is in use or in the background. When the app starts, it will ask you to grant position tracking permissions in the foreground and background.
+
+import React, { useEffect, useState } from "react"
+import { StyleSheet, Text, View, Button } from "react-native"
+import * as TaskManager from "expo-task-manager"
+import * as Location from "expo-location"
+
+const LOCATION_TASK_NAME = "LOCATION_TASK_NAME"
+let foregroundSubscription = null
+
+// Define the background task for location tracking
+TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
+  if (error) {
+    console.error(error)
+    return
   }
-  return context;
-};
+  if (data) {
+    // Extract location coordinates from data
+    const { locations } = data
+    const location = locations[0]
+    if (location) {
+      console.log("Location in background", location.coords)
+    }
+  }
+})
 
-const UsersProvider = ({ children }) => {
-  const [users, setUsers] = useState({});
-  const [currentUserId, setCurrentUserId] = useState('');
-  const [currentUserName, setCurrentUserName] = useState('');
+export default function App() {
+  // Define position state: {latitude: number, longitude: number}
+  const [position, setPosition] = useState(null)
 
+  // Request permissions right after starting the app
   useEffect(() => {
-    const fetchUsers = () => {
-      const usersRef = ref(database, 'users');
-      onValue(usersRef, (snapshot) => {
-        setUsers(snapshot.val() || {});
-      });
-    };
-
-    const fetchCurrentUser = async () => {
-      const userId = await AsyncStorage.getItem('userId');
-      const userName = await AsyncStorage.getItem('userName');
-      if (userId && userName) {
-        setCurrentUserId(userId);
-        setCurrentUserName(userName);
-      }
-    };
-
-    fetchUsers();
-    fetchCurrentUser();
-  }, []);
-
-  const updateUser = (userId, data) => {
-    const userRef = ref(database, `users/${userId}`);
-    console.log(data);
-    update(userRef, data);
-  };
-
-  const value = {
-    users,
-    currentUserId,
-    currentUserName,
-    setCurrentUserId,
-    setCurrentUserName,
-    updateUser,
-  };
-
-  return <UsersContext.Provider value={value}>{children}</UsersContext.Provider>;
-};
-
-const generateUuid = () => {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-    var r = (Math.random() * 16) | 0,
-      v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
-};
-
-const generateUuidAndSave = async () => {
-  const existingUuid = await AsyncStorage.getItem('userId');
-  if (!existingUuid) {
-    const uuid = generateUuid();
-    await AsyncStorage.setItem('userId', uuid);
-    return uuid;
-  }
-  return existingUuid;
-};
-
-const Tab = createBottomTabNavigator();
-
-const Header = () => {
-  return (
-    <SafeAreaView style={styles.headerContainer}></SafeAreaView>
-  );
-};
-
-const UserAvatarMarker = ({ user, size, color }) => {
-  const getTwoFirstLetters = (name) => {
-    if (!name) {
-      return 'NA';
+    const requestPermissions = async () => {
+      const foreground = await Location.requestForegroundPermissionsAsync()
+      if (foreground.granted) await Location.requestBackgroundPermissionsAsync()
     }
-    return name.substring(0, 2).toUpperCase();
-  };
+    requestPermissions()
+  }, [])
 
-  if (!user) {
-    return null;
+  // Start location tracking in foreground
+  const startForegroundUpdate = async () => {
+    // Check if foreground permission is granted
+    const { granted } = await Location.getForegroundPermissionsAsync()
+    if (!granted) {
+      console.log("location tracking denied")
+      return
+    }
+
+    // Make sure that foreground location tracking is not running
+    foregroundSubscription?.remove()
+
+    // Start watching position in real-time
+    foregroundSubscription = await Location.watchPositionAsync(
+      {
+        // For better logs, we set the accuracy to the most sensitive option
+        accuracy: Location.Accuracy.BestForNavigation,
+      },
+      location => {
+        setPosition(location.coords)
+      }
+    )
   }
 
-  return (
-    <Avatar
-      size={size || 30}
-      rounded
-      title={getTwoFirstLetters(user.name || 'NA')}
-      containerStyle={{ backgroundColor: color || '#FFFFFF' }}
-      titleStyle={{ color: 'black' }}
-      source={{ uri: "data:image/png" }}
-    />
-  );
-};
-
-// Haversine formula
-const getDistanceFromLatLonInKm = (lat1, lon1, lat2, lon2) => {
-  if (!lat1 || !lon1 || !lat2 || !lon2) {
-    return Infinity;
+  // Stop location tracking in foreground
+  const stopForegroundUpdate = () => {
+    foregroundSubscription?.remove()
+    setPosition(null)
   }
-  const R = 6371;
-  const dLat = deg2rad(lat2 - lat1);
-  const dLon = deg2rad(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-};
 
-const deg2rad = (deg) => {
-  return deg * (Math.PI / 180);
-};
+  // Start location tracking in background
+  const startBackgroundUpdate = async () => {
+    // Don't track position if permission is not granted
+    const { granted } = await Location.getBackgroundPermissionsAsync()
+    if (!granted) {
+      console.log("location tracking denied")
+      return
+    }
 
-const formatTimeAgo = (timestamp) => {
-  const now = Date.now();
-  const diff = now - timestamp;
+    // Make sure the task is defined otherwise do not start tracking
+    const isTaskDefined = await TaskManager.isTaskDefined(LOCATION_TASK_NAME)
+    if (!isTaskDefined) {
+      console.log("Task is not defined")
+      return
+    }
 
-  const seconds = Math.floor(diff / 1000);
-  if (seconds < 60) return `${seconds} seconds ago`;
+    // Don't track if it is already running in background
+    const hasStarted = await Location.hasStartedLocationUpdatesAsync(
+      LOCATION_TASK_NAME
+    )
+    if (hasStarted) {
+      console.log("Already started")
+      return
+    }
 
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} minutes ago`;
+    await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
+      // For better logs, we set the accuracy to the most sensitive option
+      accuracy: Location.Accuracy.BestForNavigation,
+      // Make sure to enable this notification if you want to consistently track in the background
+      showsBackgroundLocationIndicator: true,
+      foregroundService: {
+        notificationTitle: "Location",
+        notificationBody: "Location tracking in background",
+        notificationColor: "#fff",
+      },
+    })
+  }
 
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} hours ago`;
-
-  const days = Math.floor(hours / 24);
-  return `${days} days ago`;
-};
-
-const OnboardingScreen = ({ onFinish }) => {
-  const pagerRef = useRef(null);
-  const [username, setUsername] = useState(generateUsername('-', 3));
-
-  const finishSetup = async () => {
-    const userId = await generateUuidAndSave();
-    await AsyncStorage.setItem('userName', username);
-    await set(ref(database, `users/${userId}`), {
-      id: userId,
-      name: username,
-      location: null,
-      timestamp: Date.now(),
-      friends: {},
-      requests: {}
-    });
-    onFinish(username, userId);
-  };
+  // Stop location tracking in background
+  const stopBackgroundUpdate = async () => {
+    const hasStarted = await Location.hasStartedLocationUpdatesAsync(
+      LOCATION_TASK_NAME
+    )
+    if (hasStarted) {
+      await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME)
+      console.log("Location tacking stopped")
+    }
+  }
 
   return (
-    <ViewPager style={{ flex: 1 }} ref={pagerRef}>
-      <View key="1" style={styles.onboardingPage}>
-        <Text style={styles.onboardingTitle}>Welcome to Loco</Text>
-        <FontAwesome6 name="earth-americas" size={100} color="white" />
-        <TouchableOpacity onPress={() => pagerRef.current.setPage(1)} style={styles.onboardingButton}>
-          <Text style={styles.onboardingButtonText}>Next</Text>
-        </TouchableOpacity>
-      </View>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <View key="2" style={styles.onboardingPage}>
-          <Text style={styles.onboardingTitle}>Choose Your Name</Text>
-          <TextInput
-            style={styles.onboardingInput}
-            onChangeText={setUsername}
-            value={username}
-            placeholder="Enter your username"
-            placeholderTextColor="#CCCCCC"
-          />
-          <TouchableOpacity onPress={() => pagerRef.current.setPage(2)} style={styles.onboardingButton}>
-            <Text style={styles.onboardingButtonText}>Save</Text>
-          </TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
-      <View key="3" style={styles.onboardingPage}>
-        <Text style={styles.onboardingTitle}>Let's Get Started</Text>
-        <FontAwesome6 name="globe" size={100} color="white" />
-        <TouchableOpacity onPress={finishSetup} style={styles.onboardingButton}>
-          <Text style={styles.onboardingButtonText}>Finish Setup</Text>
-        </TouchableOpacity>
-      </View>
-    </ViewPager>
-  );
-};
+    <View style={styles.container}>
+      <Text>Longitude: {position?.longitude}</Text>
+      <Text>Latitude: {position?.latitude}</Text>
+      <View style={styles.separator} />
+      <Button
+        onPress={startForegroundUpdate}
+        title="Start in foreground"
+        color="green"
+      />
+      <View style={styles.separator} />
+      <Button
+        onPress={stopForegroundUpdate}
+        title="Stop in foreground"
+        color="red"
+      />
+      <View style={styles.separator} />
+      <Button
+        onPress={startBackgroundUpdate}
+        title="Start in background"
+        color="green"
+      />
+      <View style={styles.separator} />
+      <Button
+        onPress={stopBackgroundUpdate}
+        title="Stop in foreground"
+        color="red"
+      />
+    </View>
+  )
+}
 
-const UserDialog = ({ isVisible, onClose, user }) => {
-  const { currentUserId, users, updateUser } = useUsers();
-  if (!user) return null;
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  switchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  button: {
+    marginTop: 15,
+  },
+  separator: {
+    marginVertical: 8,
+  },
+})
+Notes:
+👉 Location tracking in the background is not always consistent, it depends on the OS and the configuration of the device.
 
-  const isCurrentUser = user.id === currentUserId;
-  const isFriend = users[currentUserId]?.friends?.[user.id];
-  const hasSentRequest = users[user.id]?.requests?.[currentUserId];
+👉 If you plan to submit your app to Google Play, you should notify the user, with a modal showing that you are using their location in the background before requesting location tracking.
+```
 
-  const handleFriendButtonPress = async () => {
-    if (isFriend) {
-      await removeFriend(user.id);
-    } else {
-      await toggleFriendRequest(user.id);
-    }
-    // close on Friend page, not on Map page
-    onClose();
-  };
+location-tracker.js
+```javascript
+import React, { useState, useEffect } from 'react';
+import { Text, View, StyleSheet, FlatList, Button } from 'react-native';
+import dayjs from 'dayjs'
 
-  const handleCopyAddress = () => {
-    console.log("Copy address pressed");
-  };
+import * as LocationTrackerTask from './location-tracker-task'
+import * as Firebase from './firebase-helper'
+import { addLocation, getExistingLocations, clearAllRuns } from './location-tracker-store';
 
-  const handleCopyCoordinates = () => {
-    console.log("Copy coordinates pressed");
-    Clipboard.setStringAsync(`${user.location.latitude}, ${user.location.longitude}`);
-  };
+export const LocationTracker = () => {
+    const [currentTrackingId, setCurrentTrackingId] = useState();
+    const [isRunning, setIsRunning] = useState(false);
+    const [data, setData] = useState([]);
+    const [lastTimeStamp, setLastTimeStamp] = useState();
 
-  const handleSetDirections = () => {
-    if (user.location) {
-      const url = `http://maps.google.com/?q=${user.location.latitude},${user.location.longitude}`;
-      Linking.openURL(url);
-    } else {
-      console.log("User location is not available.");
-    }
-  };
+    const startTracking = async () => {
+        let id = `TRACK_${getId()}`;
+        setCurrentTrackingId(id);
 
-  const removeFriend = async (friendId) => {
-    if (!currentUserId) {
-      console.log('User ID is not set');
-      return;
-    }
+        Firebase.init();
 
-    const currentUserRef = ref(database, `users/${currentUserId}`);
-    const friendUserRef = ref(database, `users/${friendId}`);
+        await LocationTrackerTask.start();
 
-    await update(currentUserRef, {
-      [`friends/${friendId}`]: null,
-    });
-    await update(friendUserRef, {
-      [`friends/${currentUserId}`]: null,
-    });
+        LocationTrackerTask.listen(async (location) => {
+            await addLocation(id, location)
+            setLastTimeStamp(location.timestamp);
 
-    console.log(`Removed friend ${friendId}`);
-  };
+            Firebase.storeLocation(id, location)
+        });
 
-  const toggleFriendRequest = async (receiverId) => {
-    if (!currentUserId) {
-      console.log('User ID is not set');
-      return;
+        setIsRunning(true);
     }
 
-    const requestsRef = ref(database, `users/${receiverId}/requests/${currentUserId}`);
-    onValue(requestsRef, async (snapshot) => {
-      if (snapshot.exists()) {
-        await set(requestsRef, null);
-        console.log('Friend request removed.');
-      } else {
-        await set(requestsRef, true);
-        console.log('Friend request sent!');
-      }
-    }, {
-      onlyOnce: true,
-    });
-  };
-
-  return (
-    <Modal
-      animationType="slide"
-      transparent={true}
-      visible={isVisible}
-      onRequestClose={onClose}
-      onDismiss={onClose}
-    >
-      <Pressable style={styles.centeredView} onPress={onClose}>
-        <View style={styles.modalView}>
-          <Text style={styles.modalText}>{!isCurrentUser ? user.name : "You"}</Text>
-          {!isCurrentUser && (
-            <>
-              <Button
-                title={isFriend ? "Remove friend" : hasSentRequest ? "Cancel friend request" : "Send friend request"}
-                onPress={handleFriendButtonPress}
-                buttonStyle={styles.dialogButton}
-                titleStyle={styles.dialogButtonTitle}
-              />
-            </>
-          )}
-          <Button
-            title="Copy address"
-            onPress={handleCopyAddress}
-            buttonStyle={styles.dialogButton}
-            titleStyle={styles.dialogButtonTitle}
-          />
-          <Button
-            title="Copy coordinates"
-            onPress={handleCopyCoordinates}
-            buttonStyle={styles.dialogButton}
-            titleStyle={styles.dialogButtonTitle}
-          />
-          {!isCurrentUser && (
-            <>
-              <Button
-                title="Set directions"
-                onPress={handleSetDirections}
-                buttonStyle={styles.dialogButton}
-                titleStyle={styles.dialogButtonTitle}
-              />
-            </>
-          )}
-        </View>
-      </Pressable>
-    </Modal>
-  );
-};
-
-const MapScreen = ({ searchBarRef }) => {
-  const mapRef = useRef(null);
-  const [location, setLocation] = useState(null);
-  const [initialRegionSet, setInitialRegionSet] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchActive, setSearchActive] = useState(false);
-  const [dialogVisible, setDialogVisible] = useState(false);
-  const [dialogUser, setDialogUser] = useState(null);
-  const [filter, setFilter] = useState('All');
-
-  const { users, currentUserId, currentUserName, updateUser } = useUsers();
-
-  const sortedUsers = React.useMemo(() => {
-    const query = searchQuery.toLowerCase();
-    return Object.entries(users)
-      .map(([id, user]) => ({
-        id,
-        ...user,
-        distance: location ? getDistanceFromLatLonInKm(
-          location.latitude,
-          location.longitude,
-          user.location?.latitude,
-          user.location?.longitude
-        ) : Infinity,
-      }))
-      .filter(user => user.id !== currentUserId && user.name.toLowerCase().includes(query))
-      .sort((a, b) => a.distance - b.distance);
-  }, [users, location, currentUserId, searchQuery, filter]);
-
-  useEffect(() => {
-    const initLocationTracking = async () => {
-      let { status: foreStatus } = await Location.requestForegroundPermissionsAsync();
-      let { status: backStatus } = await Location.requestBackgroundPermissionsAsync();
-      if (foreStatus !== 'granted' || backStatus !== 'granted') {
-        console.error('Permission to access location was denied');
-        return;
-      }
-
-      let currentLocation = await Location.getCurrentPositionAsync({});
-      if (currentLocation && currentLocation.coords) {
-        setLocation(currentLocation.coords);
-        setInitialRegionSet(true);
-
-        if (currentUserId && currentUserName) {
-          const userRef = ref(database, `users/${currentUserId}`);
-          update(userRef, {
-            id: currentUserId,
-            name: currentUserName,
-            location: currentLocation.coords,
-            timestamp: Date.now(),
-          });
-
-          Location.watchPositionAsync({
-            accuracy: Location.Accuracy.High,
-            distanceInterval: 1,
-          }, (newLocation) => {
-            setLocation(newLocation.coords);
-            debouncedUpdateUserLocation(userRef, newLocation.coords);
-            console.log(`Updating location through foreground`);
-            // updateUser(currentUserId, { location: newLocation.coords, timestamp: Date.now() });
-          }).then((watcher) => {
-            return () => watcher.remove();
-          });
-        }
-      }
-    };
-
-    initLocationTracking();
-  }, [currentUserId, currentUserName]);
-
-  const handleSearch = (query) => {
-    setSearchQuery(query);
-  };
-
-  const handleMapAllPress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setFilter('All');
-  };
-
-  const handleMapFriendsPress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setFilter(filter === 'Friends' ? 'All' : 'Friends');
-  };
-
-  const handleCalloutPress = (user) => {
-    console.log('Callout pressed:', user.name);
-    setDialogUser(user);
-    setDialogVisible(true);
-  };
-
-  const renderCalloutContent = (user) => {
-    if (!user || !user.location || !user.location.latitude || !user.location.longitude) {
-      return null;
+    const stopTracking = async () => {
+        await LocationTrackerTask.stop();
+        setIsRunning(false);
     }
 
-    const isCurrentUser = user.id === currentUserId;
-    const distance = location && user.location
-      ? getDistanceFromLatLonInKm(
-        location.latitude,
-        location.longitude,
-        user.location.latitude,
-        user.location.longitude
-      ).toFixed(2)
-      : 'Unknown';
-    const timeAgo = user.timestamp ? formatTimeAgo(user.timestamp) : 'Unknown';
+    const clearAllData = async () => {
+        await stopTracking();
+        await clearAllRuns();
+        setLastTimeStamp(null);
+        setData([])
+    }
+
+    useEffect(() => {
+        (async () => {
+            if (!currentTrackingId) return;
+
+            const dataTemp = await getExistingLocations(currentTrackingId)
+            setData(dataTemp)
+        })();
+    }, [lastTimeStamp])
 
     return (
-      <Callout onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); handleCalloutPress(user); }} >
-        <View style={[styles.card]}>
-          <Avatar
-            size={25}
-            rounded
-            title={user.name.substring(0, 2).toUpperCase()}
-            containerStyle={styles.avatar}
-            source={{ uri: "data:image/png" }}
-          />
-          <View style={styles.info}>
-            <Text style={styles.name}>{user.name}</Text>
-            {!isCurrentUser && (
-              <>
-                <Text style={styles.details}>{distance} km away</Text>
-                <Text style={styles.details}>{timeAgo}</Text>
-              </>
-            )}
-          </View>
-          <View style={styles.userOptions}>
-            <Icon name="dots-three-vertical" type="entypo" color="black" size={20} />
-          </View>
-        </View>
-      </Callout>
-    );
-  };
+        <View style={styles.container} >
+            <View style={styles.topBar}>
+                <Text style={styles.title}>Location Tracking - {isRunning ? 'Running' : 'Stopped'}</Text>
+                <Text style={styles.title}>Total Items: {data.length}</Text>
+                {!isRunning ?
+                    <Button
+                        style={styles.button}
+                        onPress={startTracking}
+                        title="Start New"
+                        color="#0788FF"
+                        accessibilityLabel="Start a new Tracker"
+                    /> :
 
-  const toggleFriendRequest = async (receiverId) => {
-    if (!currentUserId) {
-      console.log('User ID is not set');
-      return;
-    }
-
-    const requestsRef = ref(database, `users/${receiverId}/requests/${currentUserId}`);
-    onValue(requestsRef, async (snapshot) => {
-      if (snapshot.exists()) {
-        await set(requestsRef, null);
-        console.log('Friend request removed.');
-      } else {
-        await set(requestsRef, true);
-        console.log('Friend request sent!');
-      }
-    }, {
-      onlyOnce: true,
-    });
-  };
-
-  const removeFriend = async (friendId) => {
-    if (!currentUserId) {
-      console.log('User ID is not set');
-      return;
-    }
-
-    const currentUserRef = ref(database, `users/${currentUserId}`);
-    const friendUserRef = ref(database, `users/${friendId}`);
-
-    await update(currentUserRef, {
-      [`friends/${friendId}`]: null,
-    });
-    await update(friendUserRef, {
-      [`friends/${currentUserId}`]: null,
-    });
-
-    console.log(`Removed friend ${friendId}`);
-  };
-
-  const recenterMap = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (location && mapRef.current) {
-      mapRef.current.animateToRegion({
-        latitude: location.latitude,
-        longitude: location.longitude,
-        latitudeDelta: 0.0922,
-        longitudeDelta: 0.0421,
-      }, 500);
-    }
-  };
-
-  const zoomToUserLocation = (location, isFriend) => {
-    setSearchQuery('');
-    setSearchActive(false);
-    Keyboard.dismiss();
-    if (!isFriend) {
-      setFilter('All');
-    }
-    if (mapRef.current && location) {
-      mapRef.current.animateToRegion({
-        latitude: location.latitude,
-        longitude: location.longitude,
-        latitudeDelta: 0.005,
-        longitudeDelta: 0.005,
-      }, 1000);
-    }
-  };
-
-  const closeSearch = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    searchBarRef.current.blur();
-    setSearchActive(false);
-    setSearchQuery('');
-  };
-
-  return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <View style={{ flex: 1 }}>
-          <Header />
-          <View style={styles.filterContainer}>
-            {searchActive && (
-              <Button
-                type="solid"
-                icon={{
-                  name: 'chevron-left',
-                  type: 'font-awesome',
-                  size: 20,
-                  color: 'black',
-                }}
-                onPress={closeSearch}
-                buttonStyle={styles.closeButtonStyle}
-                containerStyle={styles.closeButtonContainer}
-              />
-            )}
-            <SearchBar
-              platform="default"
-              placeholder="Search for users..."
-              onChangeText={handleSearch}
-              value={searchQuery}
-              onFocus={() => { setSearchActive(true); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light) }}
-              ref={searchBarRef}
-              containerStyle={[
-                styles.searchContainerStyle,
-                { marginLeft: searchActive ? 60 : 0, flex: searchActive ? 1 : 0 },
-              ]}
-              inputContainerStyle={styles.searchInputContainerStyle}
-              inputStyle={styles.searchInputStyle}
-              round
-            />
-            <View style={styles.chipsContainer}>
-              <Chip
-                title="All"
-                icon={{
-                  name: 'globe',
-                  type: 'font-awesome',
-                  size: 17,
-                }}
-                titleStyle={{ color: 'black' }}
-                onPress={handleMapAllPress}
-                type="solid"
-                containerStyle={styles.chipContainerStyle}
-                buttonStyle={[styles.chipStyle, filter === 'All' && styles.selectedChipStyle]}
-              />
-              <Chip
-                title="Friends"
-                icon={{
-                  name: 'users',
-                  type: 'font-awesome',
-                  size: 17,
-                }}
-                titleStyle={{ color: 'black' }}
-                onPress={handleMapFriendsPress}
-                type="solid"
-                containerStyle={styles.chipContainerStyle}
-                buttonStyle={[styles.chipStyle, filter === 'Friends' && styles.selectedChipStyle]}
-              />
+                    <Button
+                        style={styles.button}
+                        onPress={stopTracking}
+                        title="Stop"
+                        color="#0788FF"
+                        accessibilityLabel="Stop the current Tracker"
+                    />
+                }
+                <Button
+                    style={styles.button}
+                    onPress={clearAllData}
+                    title="Clear"
+                    color="#0788FF"
+                    accessibilityLabel="Clear all items from storage"
+                />
             </View>
-          </View>
-          {(searchActive || searchQuery) && (
-            <View style={styles.searchResultsContainer}>
-              {sortedUsers.length === 0 ? (
-                <View style={styles.noUserFoundContainer}>
-                  <Text style={styles.noUserFoundText}>No user found</Text>
-                </View>
-              ) : (
-                <ScrollView keyboardShouldPersistTaps='handled'>
-                  {sortedUsers.map((user) => {
-                    const isFriend = users[currentUserId]?.friends?.[user.id];
+            <FlatList
+                backgroundColor={"white"}
+                data={data}
+                renderItem={({ index, item }) => {
+                    const time = dayjs(item.timestamp);
+
                     return (
-                      <ListItem
-                        key={user.id}
-                        bottomDivider
-                        onPress={() => zoomToUserLocation(user.location, isFriend)}
-                      >
-                        <UserAvatarMarker user={user} size={30} color="#00ADB5" />
-                        <ListItem.Content>
-                          <ListItem.Title>{user.name}</ListItem.Title>
-                          <ListItem.Subtitle>{user.distance.toFixed(2)} km away</ListItem.Subtitle>
-                        </ListItem.Content>
-                        <Button
-                          type="clear"
-                          icon={{
-                            name: isFriend ? 'user-times' : user.requests && user.requests[currentUserId] ? 'check' : 'user-plus',
-                            type: 'font-awesome',
-                            size: 25,
-                            color: isFriend ? 'red' : user.requests && user.requests[currentUserId] ? 'green' : '#222831',
-                          }}
-                          onPress={() => isFriend ? removeFriend(user.id) : toggleFriendRequest(user.id)}
-                        />
-                      </ListItem>
-                    );
-                  })}
-                </ScrollView>
-              )}
-            </View>
-          )}
-          <MapView
-            ref={mapRef}
-            provider={PROVIDER_GOOGLE}
-            style={styles.map}
-            initialRegion={location ? {
-              latitude: location.latitude,
-              longitude: location.longitude,
-              latitudeDelta: 0.0922,
-              longitudeDelta: 0.0421,
-            } : undefined}
-            onMapReady={() => {
-              if (location && !initialRegionSet) {
-                setInitialRegionSet(true);
-                mapRef.current.animateToRegion({
-                  latitude: location.latitude,
-                  longitude: location.longitude,
-                  latitudeDelta: 0.0922,
-                  longitudeDelta: 0.0421,
-                }, 500);
-              };
-            }}
-            onRegionChange={() => {
-            }}
-            customMapStyle={customMapStyle}
-          >
-            {location && location.latitude && location.longitude && (
-              <Marker.Animated
-                key={currentUserId}
-                anchor={{ x: 0.5, y: 0.5 }}
-                coordinate={new AnimatedRegion({
-                  latitude: location.latitude,
-                  longitude: location.longitude,
-                  latitudeDelta: 0.0922,
-                  longitudeDelta: 0.0421,
-                })}
-                title="You"
-              >
-                <UserAvatarMarker user={{ name: currentUserName || 'NA' }} color="#00ADB5" />
-                {renderCalloutContent({ id: currentUserId, name: currentUserName, location })}
-              </Marker.Animated>
-            )}
-            {Object.entries(users)
-              .filter(([id, user]) =>
-                id !== currentUserId &&
-                user &&
-                user.location &&
-                user.location.latitude &&
-                user.location.longitude &&
-                (filter === 'All' || (filter === 'Friends' && users[currentUserId]?.friends?.[id]))
-              )
-              .map(([id, user]) => (
-                <Marker.Animated
-                  key={id}
-                  anchor={{ x: 0.5, y: 0.5 }}
-                  coordinate={new AnimatedRegion({
-                    latitude: user.location.latitude,
-                    longitude: user.location.longitude,
-                    latitudeDelta: 0.0922,
-                    longitudeDelta: 0.0421,
-                  })}
-                  title={user.name || 'Anonymous'}
-                >
-                  <UserAvatarMarker user={{ name: user.name || 'NA' }} />
-                  {renderCalloutContent(user)}
-                </Marker.Animated>
-              ))
-            }
-          </MapView>
-          <Button
-            buttonStyle={[styles.recenterButton, null]}
-            containerStyle={styles.recenterButtonContainer}
-            icon={
-              <Icon
-                name="location-arrow"
-                type="font-awesome"
-                size={25}
-                color={'#00ADB5'}
-              />
-            }
-            onPress={() => recenterMap()}
-          />
+                        <View key={index} style={styles.item}>
+                            <Text style={styles.title}>{time.format('HH:mm:ss')}</Text>
+                            <Text>{item.coords.longitude} {item.coords.latitude}</Text>
+                        </View>
+                    )
+                }}
+            />
         </View>
-        <UserDialog
-          isVisible={dialogVisible}
-          onClose={() => setDialogVisible(false)}
-          user={dialogUser}
-        />
-      </KeyboardAvoidingView>
-    </TouchableWithoutFeedback>
-  );
-};
+    );
+}
 
-const App = () => {
-  const [showOnboarding, setShowOnboarding] = useState(null);
-  const { currentUserName, currentUserId, setCurrentUserName, setCurrentUserId } = useUsers();
-  const searchBarRef = useRef(null);
-
-  const focusSearchBar = () => {
-    if (searchBarRef.current) {
-      searchBarRef.current.focus();
+const styles = StyleSheet.create({
+    topBar: {
+        padding: 10,
+        flexDirection: 'column',
+        alignItems: 'center',
+        borderBottomWidth: 1,
+    },
+    container: {
+        width: '100%',
+    },
+    item: {
+        borderBottomWidth: 1,
+        padding: 10,
+    },
+    title: {
+        fontWeight: 'bold'
+    },
+    button: {
+        backgroundColor: '#0788FF',
+        borderColor: '#0788FF',
+        borderWidth: 1
     }
-  };
+});
 
-  useEffect(() => {
-    const checkUserData = async () => {
-      try {
-        const storedUserName = await AsyncStorage.getItem('userName');
-        const storedUserId = await AsyncStorage.getItem('userId');
-        if (storedUserId && storedUserName) {
-          setCurrentUserId(storedUserId);
-          setCurrentUserName(storedUserName);
-          setShowOnboarding(false);
-          await startLocationTracking();
-        } else {
-          setShowOnboarding(true);
-        }
-      } catch (error) {
-        console.error('Error fetching user data:', error);
-      }
+const getId = () => Math.random().toString(36).replace(/[^a-z]+/g, '').substr(0, 5)
+```
+
+firebase-helper.js
+```javascript
+import * as firebase from 'firebase';
+import { getUniqueId } from 'react-native-device-info';
+import dayjs from 'dayjs';
+
+export const init = () => {
+    if (firebase.apps.length != 0) return;
+    const config = {
+        apiKey: "AIzaSyDYAZbmSlgcazgxxT4t2MUymkzjkunj9G8",
+        authDomain: "locationtracker-281711.firebaseapp.com",
+        databaseURL: "https://locationtracker-281711.firebaseio.com",
+        projectId: "locationtracker-281711",
+        storageBucket: "locationtracker-281711.appspot.com",
+        messagingSenderId: "727349450304",
+        appId: "1:727349450304:web:a9bf75e63dd6b4c55ab1a5"
     };
 
-    checkUserData();
+    firebase.initializeApp(config);
+}
 
-    Notifications.requestPermissionsAsync();
+export const storeLocation = (id, location) => {
+    try {
+        const itemId = dayjs(location.timestamp).format('HHmmss')
+        firebase.database().ref(`tracking/${id}/${itemId}`).set({
+            id: `${id}_${itemId}`,
+            location
+        });
+        
+        firebase.database().ref(`tracking/${id}/latest`).set({
+            id: `${id}_${itemId}`,
+            location
+        });
+    } catch (e) {
+        console.log('Permission denied')
+    }
+}
 
-    Notifications.setNotificationHandler({
-      handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: false,
-        shouldSetBadge: false,
-      }),
+const getId = () => Math.random().toString(36).replace(/[^a-z]+/g, '').substr(0, 5)
+```
+
+location-tracker-store.js
+```javascript
+import AsyncStorage from '@react-native-community/async-storage';
+
+export const addLocation = async (id, location) => {
+    let existingList = await getExistingLocations(id);
+
+
+    const jsonValue = JSON.stringify({list: [
+        location,
+        ...existingList
+    ]})
+
+    await AsyncStorage.setItem(id, jsonValue)
+}
+
+export const getExistingLocations = async id => {
+    const existingLocationsRaw = await AsyncStorage.getItem(id);
+    if(!existingLocationsRaw) return [];
+    
+    try { 
+        const existingLocation = JSON.parse(existingLocationsRaw);
+        return existingLocation.list;
+    } catch (e) {
+        console.error(e);
+    }
+
+    return [];
+}
+
+export const clearAllRuns = async () => {
+    try {
+        const keys = await AsyncStorage.getAllKeys();
+        await AsyncStorage.multiRemove(keys);
+    } catch (error) {
+        console.error(error)
+    }
+}
+```
+
+location-tracker-task.js
+```javascript
+import * as Location from 'expo-location';
+import * as TaskManager from 'expo-task-manager';
+
+const LOCATION_TRACKER_TASK_NAME = 'Background_Location_Tracker';
+
+export const start = async () => {
+    let permission = await Location.requestPermissionsAsync();
+    if (permission.status !== 'granted') {
+        throw 'Permission to access location was denied';
+    }
+
+    await Location.startLocationUpdatesAsync(LOCATION_TRACKER_TASK_NAME, {
+        accuracy: Location.Accuracy.Highest,
+        showsBackgroundLocationIndicator: true,
+        timeInterval: 10000,
+        distanceInterval: 2,
+        foregroundService: {
+            notificationTitle: 'Location Tracker',
+            notificationBody: 'We are currently tracking your location',
+            notificationColor: '#FF0000'
+        },
+        activityType: Location.ActivityType.Fitness
     });
+}
 
-    // return () => {
-    //   TaskManager.unregisterAllTasksAsync();
-    // };
-  }, []);
+export const listen = callback => {
+    TaskManager.defineTask(LOCATION_TRACKER_TASK_NAME, async ({ data: { locations }, error }) => {
+        if (error) {
+            throw error;
+        }
+        locations.map(location => callback(location));
+    });
+}
 
-  const handleFinishOnboarding = (username, userId) => {
-    // const userRef = ref(database, `users/${userId}`);
-    // set(userRef, {
-    //   id: userId,
-    // });
-    setCurrentUserName(username);
-    setCurrentUserId(userId);
-    setShowOnboarding(false);
-  };
-
-  if (showOnboarding) {
-    return <OnboardingScreen onFinish={handleFinishOnboarding} />;
-  }
-
-  return (
-    <NavigationContainer>
-      <Tab.Navigator
-        screenOptions={{
-          headerShown: false,
-          tabBarActiveTintColor: '#00ADB5',
-          tabBarInactiveTintColor: '#EEEEEE',
-          tabBarStyle: styles.bottomNavBar,
-        }}
-      >
-        <Tab.Screen
-          name="Map"
-          options={{
-            tabBarIcon: ({ color, size }) => (
-              <FontAwesome6 name="earth-americas" size={size} color={color} />
-            ),
-          }}
-        >
-          {(props) => <MapScreen {...props} searchBarRef={searchBarRef} />}
-        </Tab.Screen>
-        <Tab.Screen
-          name="Friends"
-          options={{
-            tabBarIcon: ({ color, size }) => (
-              <FontAwesome6 name="users" size={size} color={color} />
-            ),
-          }}
-        >
-          {(props) => <FriendsScreen {...props} focusSearchBar={focusSearchBar} />}
-        </Tab.Screen>
-        <Tab.Screen
-          name="You"
-          component={YouScreen}
-          options={{
-            tabBarIcon: ({ color, size }) => (
-              <UserAvatarMarker user={{ name: currentUserName }} size={size} />
-            ),
-          }}
-        />
-      </Tab.Navigator>
-      <StatusBar barStyle="light-content" />
-    </NavigationContainer>
-  );
-};
-
-export default function Root() {
-  return (
-    <UsersProvider>
-      <App />
-    </UsersProvider>
-  );
+export const stop = async () => {
+    try {
+        await TaskManager.unregisterTaskAsync(LOCATION_TRACKER_TASK_NAME)
+    } catch (e) {
+        console.log('Was already stopped')
+    }
 }
 ```
