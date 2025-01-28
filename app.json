@@ -13,16 +13,21 @@
     },
     "plugins": [
       [
-        "expo-location",
+        "react-native-radar",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow this app to access your location even if the app is closed or not in use.",
-          "locationWhenInUsePermission": "Allow this app to access your location when the app is in use.",
-          "isIosBackgroundLocationEnabled": true,
-          "isAndroidBackgroundLocationEnabled": true
+          "iosFraud": false,
+          "iosNSLocationWhenInUseUsageDescription": "We use your location to help share your position in real-time.",
+          "iosNSLocationAlwaysAndWhenInUseUsageDescription": "Background location is used so your friends can see your location even if the app is closed.",
+          "iosBackgroundMode": true,
+          "androidFraud": true,
+          "androidBackgroundPermission": true,
+          "androidFineLocationPermission": true,
+          "addRadarSDKMotion": false
         }
       ]
     ],
     "ios": {
+      "supportsTablet": true,
       "infoPlist": {
         "UIBackgroundModes": [
           "location",
@@ -35,7 +40,6 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#212832"
       },
-      "icon": "./assets/icon.png",
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
@@ -43,8 +47,7 @@
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_BACKGROUND_LOCATION",
-        "android.permission.FOREGROUND_SERVICE",
-        "android.permission.FOREGROUND_SERVICE_LOCATION"
+        "android.permission.FOREGROUND_SERVICE"
       ]
     },
     "extra": {
