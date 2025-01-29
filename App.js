@@ -2,22 +2,24 @@
 import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { onAuthStateChanged } from 'firebase/auth';
 import { auth, db } from './firebaseConfig';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 // Screens
 import LoginScreen from './screens/LoginScreen';
 import SignupScreen from './screens/SignupScreen';
 import HomeScreen from './screens/HomeScreen';
+import LoadingScreen from './screens/LoadingScreen'; // <-- our new screen
 
 // Radar import
 import Radar from 'react-native-radar';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 const Stack = createStackNavigator();
 
 export default function App() {
   const [user, setUser] = useState(null);
+  const [initializing, setInitializing] = useState(true);
 
   // -----------------------------------------------
   // 1. SETUP RADAR EVENT LISTENERS (ONE-TIME)
@@ -66,7 +68,7 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
-
+      setInitializing(false); // We have determined the auth state at least once
       if (currentUser) {
         // Identify user to Radar
         Radar.setUserId(currentUser.uid);
@@ -84,11 +86,9 @@ export default function App() {
             const bgStatus = await Radar.requestPermissions(true);
             console.log('Background perms =>', bgStatus);
           }
-
         } catch (err) {
           console.error('Error requesting Radar permissions =>', err);
         }
-
 
         // Configure the foreground notification on Android
         Radar.setForegroundServiceOptions({
@@ -121,9 +121,18 @@ export default function App() {
         Radar.stopTracking();
       }
     });
+
     return () => unsubscribe();
   }, []);
 
+  // -----------------------------------------------
+  // 3. SHOW LOADING SCREEN DURING AUTH CHECK
+  // -----------------------------------------------
+  if (initializing) {
+    return <LoadingScreen />;
+  }
+
+  // If not initializing, show the normal app
   return (
     <NavigationContainer>
       <Stack.Navigator>

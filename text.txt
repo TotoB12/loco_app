@@ -9,22 +9,24 @@ App.js
 import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { onAuthStateChanged } from 'firebase/auth';
 import { auth, db } from './firebaseConfig';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 // Screens
 import LoginScreen from './screens/LoginScreen';
 import SignupScreen from './screens/SignupScreen';
 import HomeScreen from './screens/HomeScreen';
+import LoadingScreen from './screens/LoadingScreen'; // <-- our new screen
 
 // Radar import
 import Radar from 'react-native-radar';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 const Stack = createStackNavigator();
 
 export default function App() {
   const [user, setUser] = useState(null);
+  const [initializing, setInitializing] = useState(true);
 
   // -----------------------------------------------
   // 1. SETUP RADAR EVENT LISTENERS (ONE-TIME)
@@ -73,7 +75,7 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
-
+      setInitializing(false); // We have determined the auth state at least once
       if (currentUser) {
         // Identify user to Radar
         Radar.setUserId(currentUser.uid);
@@ -91,11 +93,9 @@ export default function App() {
             const bgStatus = await Radar.requestPermissions(true);
             console.log('Background perms =>', bgStatus);
           }
-
         } catch (err) {
           console.error('Error requesting Radar permissions =>', err);
         }
-
 
         // Configure the foreground notification on Android
         Radar.setForegroundServiceOptions({
@@ -128,9 +128,18 @@ export default function App() {
         Radar.stopTracking();
       }
     });
+
     return () => unsubscribe();
   }, []);
 
+  // -----------------------------------------------
+  // 3. SHOW LOADING SCREEN DURING AUTH CHECK
+  // -----------------------------------------------
+  if (initializing) {
+    return <LoadingScreen />;
+  }
+
+  // If not initializing, show the normal app
   return (
     <NavigationContainer>
       <Stack.Navigator>
@@ -514,6 +523,31 @@ const styles = StyleSheet.create({
 });
 ```
 
+screens/LoadingScreen.js
+```javascript
+// screens/LoadingScreen.js
+import React from 'react';
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
+
+export default function LoadingScreen() {
+  return (
+    <View style={styles.container}>
+      {/* Simple spinner in the center */}
+      <ActivityIndicator size="large" color="#00ADB5" />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#212832',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});
+```
+
 firebaseConfig.js
 ```javascript
 // firebaseConfig.js
@@ -645,4 +679,172 @@ app.json
 }
 ```
 
-This setup appears to work. And I now want to implement the main features of the UI. I am hesitant between using `react-map-gl` or normal Mapbox GL JS for my app. I will need the map to be able to display the live location of all the user's that have shared their location using custom markers, and have them animate to new positions when updated. I will also need to be able to handle "opening" those markers to see more details and options. Which should I pick?
+This setup appears to work. And I now want to implement the main features of the UI. Firstly, the map. It should cover the entire screen, and use "Mapbox Maps SDK for React Native". I want you to fully develop and implement this. Do not have the map do anything else for now. Here is some documentation to help:
+
+```
+Expo Installation
+⚠️ This package cannot be used in the "Expo Go" app because it requires custom native code.
+
+First install the package with expo, yarnor npm.
+
+Install the latest release:
+
+expo install @rnmapbox/maps
+Plugin Configuration
+After installing this package, add the config plugin to the plugins array of your app.{json,config.js,config.ts}:
+
+{
+  "expo": {
+    "plugins": [
+      [
+        "@rnmapbox/maps",
+        {
+          "RNMapboxMapsVersion": "11.8.0"
+        }
+      ]
+    ]
+  }
+}
+You'll need to provide RNMapboxMapsDownloadToken as well. This secret token requires the DOWNLOADS:READ scope. You can refer to the iOS guide, which explains how to configure this token under the section Configure your secret token.
+
+{
+  "expo": {
+    "plugins": [
+      [
+        "@rnmapbox/maps",
+        {
+          "RNMapboxMapsDownloadToken": "sk.ey...qg"
+        }
+      ]
+    ]
+  }
+}
+If you want to show the user's current location on the map with the UserLocation component, you can use the expo-location plugin to configure the required NSLocationWhenInUseUsageDescription property. Install the plugin with npx expo install expo-location and add its config plugin to the plugins array of your app.{json,config.js,config.ts}:
+
+{
+  "expo": {
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Show current location on map."
+        }
+      ]
+    ]
+  }
+}
+Next, rebuild your app as described in the "Adding custom native code" guide.
+
+Advanced Configuration
+It's possible to overwrite the native SDK version with RNMapboxMapsVersion:
+
+{
+  "expo": {
+    "plugins": [
+      [
+        "@rnmapbox/maps",
+        {
+          "RNMapboxMapsVersion": "10.16.2",
+          "RNMapboxMapsDownloadToken": "sk.ey...qg"
+        }
+      ]
+    ]
+  }
+}
+To use V11 just set the version to a 11 version, see the ios guide:
+
+{
+  "expo": {
+    "plugins": [
+      [
+        "@rnmapbox/maps",
+        {
+          "RNMapboxMapsVersion": "11.8.0",
+          "RNMapboxMapsDownloadToken": "sk.ey...qg",
+        }
+      ]
+    ]
+  }
+}
+Manual Setup
+For bare workflow projects, you can follow the manual setup guides:
+
+iOS
+Android
+```
+
+```
+Getting Started
+Congratulations, you successfully installed rnmapbox/maps! 🎉 Where to go from here? You can head straight to examples folder if you want to jump into the deep end. However, if you prefer an easier ramp-up, then make sure to stick around and check out the guides below.
+
+Installation
+Please follow our install guides for the platforms you're interested in (ios, android, expo): https://rnmapbox.github.io/docs/install
+
+Setting your accessToken
+In order to work, mapbox requires you to create an accessToken and set it in your app. If you haven't created one yet, make sure to sign up for an account here You can create and manage your access tokens on your Mapbox Account page Once you have your accessToken, set it like this
+
+import Mapbox from "@rnmapbox/maps";
+
+Mapbox.setAccessToken("<YOUR_ACCESSTOKEN>");
+Setting connection status [Android only]
+If you are hosting styles and sources on localhost, you might need to set the connection status manually for Mapbox to be able to use them. See mapbox/mapbox-gl-native#12819.
+
+Manually sets the connectivity state of the app, bypassing any checks to the ConnectivityManager. Set to true for connected, false for disconnected, and null for ConnectivityManager to determine.
+
+import Mapbox from "@rnmapbox/maps";
+
+Mapbox.setConnected(true);
+Disabling Telemetry
+By default mapbox collects telemetry. If you would like to programmatically disable this within your app add the code below.
+
+  componentDidMount() {
+    Mapbox.setTelemetryEnabled(false);
+  }
+For more information on mapbox and telemetry: https://www.mapbox.com/telemetry
+
+Show a map
+import React, { Component } from "react";
+import { StyleSheet, View } from "react-native";
+import Mapbox, {MapView} from "@rnmapbox/maps";
+
+Mapbox.setAccessToken("<YOUR_ACCESSTOKEN>");
+
+const styles = StyleSheet.create({
+  page: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#F5FCFF"
+  },
+  container: {
+    height: 300,
+    width: 300,
+    backgroundColor: "tomato"
+  },
+  map: {
+    flex: 1
+  }
+});
+
+export default class App extends Component {
+  componentDidMount() {
+    Mapbox.setTelemetryEnabled(false);
+  }
+
+  render() {
+    return (
+      <View style={styles.page}>
+        <View style={styles.container}>
+          <MapView style={styles.map} />
+        </View>
+      </View>
+    );
+  }
+}
+```
+
+Do not show any attribution and disable telemetry if possible.
+
+When the app opens, I need the map to not be loaded: I want the script to make an initial `Radar.trackOnce` request:
+- if it succeds, load the map zoomed in at this initial user location.
+- if it fails, instead of the map, show a message saying "Grant Loco location permissions."
