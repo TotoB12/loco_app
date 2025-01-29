@@ -843,6 +843,89 @@ export default class App extends Component {
 }
 ```
 
+```
+Expo Installation
+⚠️ This package cannot be used in the "Expo Go" app because it requires custom native code.
+
+First install the package with expo, yarnor npm.
+
+Install the latest release:
+
+expo install @rnmapbox/maps
+Installing other versions
+Replace @rnmapbox/maps with the following to install other versions:
+
+rnmapbox/maps#main installs the latest source from git
+Plugin Configuration
+After installing this package, add the config plugin to the plugins array of your app.{json,config.js,config.ts}:
+
+{
+  "expo": {
+    "plugins": [
+      [
+        "@rnmapbox/maps",
+        {
+          "RNMapboxMapsImpl": "maplibre"
+        }
+      ]
+    ]
+  }
+}
+For mapbox or mapbox-gl you'll need to provide RNMapboxMapsDownloadToken as well.
+
+{
+  "expo": {
+    "plugins": [
+      [
+        "@rnmapbox/maps",
+        {
+          "RNMapboxMapsImpl": "mapbox",
+          "RNMapboxMapsDownloadToken": "sk.ey...qg"
+        }
+      ]
+    ]
+  }
+}
+If you want to show the user's current location on the map with the UserLocation component, you can use the expo-location plugin to configure the required NSLocationWhenInUseUsageDescription property. Install the plugin with npx expo install expo-location and add its config plugin to the plugins array of your app.{json,config.js,config.ts}:
+
+{
+  "expo": {
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Show current location on map."
+        }
+      ]
+    ]
+  }
+}
+Next, rebuild your app as described in the "Adding custom native code" guide.
+
+Advanced Configuration
+For mapbox or mapbox-gl on iOS it's possible to overwrite the native SDK version with RNMapboxMapsVersion:
+
+{
+  "expo": {
+    "plugins": [
+      [
+        "@rnmapbox/maps",
+        {
+          "RNMapboxMapsImpl": "mapbox",
+          "RNMapboxMapsVersion": "10.XX.XX",
+          "RNMapboxMapsDownloadToken": "sk.ey...qg"
+        }
+      ]
+    ]
+  }
+}
+Manual Setup
+For bare workflow projects, you can follow the manual setup guides:
+
+iOS
+Android
+```
+
 Do not show any attribution and disable telemetry if possible.
 
 When the app opens, I need the map to not be loaded: I want the script to make an initial `Radar.trackOnce` request:

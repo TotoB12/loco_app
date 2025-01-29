@@ -1,5 +1,8 @@
-{
-  "expo": {
+import 'dotenv/config';
+
+export default ({ config }) => {
+  return {
+    ...config,
     "name": "loco",
     "slug": "loco",
     "version": "0.1.3",
@@ -24,6 +27,12 @@
           "androidFineLocationPermission": true,
           "addRadarSDKMotion": false
         }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Show current location on map."
+        }
       ]
     ],
     "ios": {
@@ -32,7 +41,9 @@
         "UIBackgroundModes": [
           "location",
           "fetch"
-        ]
+        ],
+        "NSLocationWhenInUseUsageDescription": "Show current location on map",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Background location usage..."
       }
     },
     "android": {
@@ -55,5 +66,5 @@
         "projectId": "eacea42d-f4e8-4a94-b43a-f19dc934865e"
       }
     }
-  }
-}
+  };
+};
