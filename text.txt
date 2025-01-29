@@ -26,16 +26,18 @@ const Stack = createStackNavigator();
 export default function App() {
   const [user, setUser] = useState(null);
 
-  // --- SETUP RADAR EVENT LISTENERS ONE TIME ---
+  // -----------------------------------------------
+  // 1. SETUP RADAR EVENT LISTENERS (ONE-TIME)
+  // -----------------------------------------------
   useEffect(() => {
-    // 1) Initialize Radar
+    // Initialize Radar
     Radar.initialize('prj_live_pk_2bb1459eda8faeaf64aa70990ca689ee231f5b42');
-    // 2) (Optional) Set log level to debug while developing
-    Radar.setLogLevel('debug');
+    Radar.setLogLevel('debug'); // Remove or set to 'none' in production
 
-    // 3) Listen for location updates from Radar
+    // Listen for location updates
     Radar.on('location', async (result) => {
       console.log('Radar location event =>', result);
+
       // If user is logged in, push location to Firestore
       const currentUser = auth.currentUser;
       if (currentUser && result.location) {
@@ -53,7 +55,7 @@ export default function App() {
       }
     });
 
-    // 4) Listen for errors
+    // Listen for Radar errors
     Radar.on('error', (err) => {
       console.error('Radar error =>', err);
     });
@@ -65,60 +67,61 @@ export default function App() {
     };
   }, []);
 
-  // --- AUTH STATE LISTENER ---
+  // -----------------------------------------------
+  // 2. AUTH STATE LISTENER
+  // -----------------------------------------------
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
 
       if (currentUser) {
-        // Identify user
+        // Identify user to Radar
         Radar.setUserId(currentUser.uid);
         Radar.setDescription(currentUser.email || 'Radar User');
-        // Optionally store metadata:
         Radar.setMetadata({
-          // e.g., user role or anything you want
           role: 'tester'
         });
 
-        // Ensure location permissions
-        // For best user experience, request foreground first, then background
-        // (iOS requires two separate calls.)
+        // Request location permissions in two stages (foreground, then background)
         try {
-          const fgStatus = await Radar.requestPermissions(false); // request foreground
+          const fgStatus = await Radar.requestPermissions(false);
           console.log('Foreground perms =>', fgStatus);
 
           if (fgStatus === 'GRANTED_FOREGROUND') {
-            // Now request background
-            const bgStatus = await Radar.requestPermissions(true); // request background
+            const bgStatus = await Radar.requestPermissions(true);
             console.log('Background perms =>', bgStatus);
           }
+
         } catch (err) {
           console.error('Error requesting Radar permissions =>', err);
         }
 
-        // Start background tracking
-        // Use a preset or custom options. For 1-min intervals, use custom:
+
+        // Configure the foreground notification on Android
         Radar.setForegroundServiceOptions({
-          text: 'We are tracking your location in the background',
-          title: 'Background Location Active',
-          updatesOnly: false, // set to true if you only want the notification shown during movement
-          importance: 2, // NotificationManager.IMPORTANCE_DEFAULT = 3, maybe set 2 if you want lower
+          text: 'Location tracking is active',
+          title: 'Tracking in background',
+          updatesOnly: false,
+          importance: 2,
         });
 
+        // -----------------------------------------------
+        // START CUSTOM TRACKING EVERY 60s
+        // -----------------------------------------------
         Radar.startTrackingCustom({
-          desiredStoppedUpdateInterval: 0,     // 0 means "shutdown" when stopped
-          fastestStoppedUpdateInterval: 0,
-          desiredMovingUpdateInterval: 60,     // 60 seconds
-          fastestMovingUpdateInterval: 30,     // no faster than 30 sec
-          desiredSyncInterval: 20,            // sync with server every 20 sec
+          desiredStoppedUpdateInterval: 60, // every 60s when "stopped"
+          fastestStoppedUpdateInterval: 60,
+          desiredMovingUpdateInterval: 60,  // every 60s when "moving"
+          fastestMovingUpdateInterval: 30,  // won't go faster than 30s
+          desiredSyncInterval: 20,          // sync to Radar server every 20s
           desiredAccuracy: 'high',
-          stopDuration: 140,
-          stopDistance: 70,
-          replay: 'none',    // do not replay offline updates, or 'stops' if you want to
-          sync: 'all',       // sync all location updates to server
+          stopDuration: 140,                // how long before considered "stopped"
+          stopDistance: 70,                 // how far to move before "moving"
+          replay: 'none',                   // do not replay offline updates
+          sync: 'all',                      // sync all location updates
           useStoppedGeofence: false,
-          showBlueBar: false, // if set to true on iOS, you'll see the blue bar for background usage
-          foregroundServiceEnabled: true, // show a notification on Android
+          showBlueBar: false,               // iOS: if true, user sees blue bar
+          foregroundServiceEnabled: true,   // Android: show a persistent notif
         });
       } else {
         // If user logs out, stop tracking
@@ -170,16 +173,20 @@ export default function HomeScreen() {
   const [currentLocation, setCurrentLocation] = useState(null);
 
   useEffect(() => {
-    // Optionally, get a quick "foreground" location update
-    Radar.trackOnce()
-      .then((result) => {
-        if (result.location) {
-          setCurrentLocation(result.location);
-        }
-      })
-      .catch((err) => {
-        console.log('Radar trackOnce error =>', err);
-      });
+    // Example: track once every 10s while in foreground
+    const intervalId = setInterval(() => {
+      Radar.trackOnce({desiredAccuracy: 'high'})
+        .then((result) => {
+          if (result.location) {
+            setCurrentLocation(result.location);
+          }
+        })
+        .catch((err) => {
+          console.log('Radar trackOnce error =>', err);
+        });
+    }, 10_000);
+
+    return () => clearInterval(intervalId);
   }, []);
 
   const handleSignOut = async () => {
@@ -638,702 +645,4 @@ app.json
 }
 ```
 
-This setup appears to work, but I have a few questions and clarifications to make. When the app is open, I want it to send regular location updates to be as precise as possible. When the app is closed, I need it to send an update every 60 seconds, no matter how much the user has moved. I want you to fully develop and implement this in my code. A question: I am wondering what is the best way to store the user's information. Later, I will implement sharing your location between users. What would be the best way to do this? If all data is kept with Firebase, can devices receive updates of only the locations that have been shared with them?
-To help you, here is some of Radar's documentation:
-
-```
-React Native SDK
-This is the documentation for the React Native module. Before integrating, read the native SDK documentation to familiarize yourself with the platform.
-
-See the source on GitHub here. Or, see the react-native-radar package on npm here.
-
-The SDK currently supports React Native 0.60.0 and higher.
-
-Install#
-Install the package from npm:
-
-npm install --save react-native-radar
-If you're using Expo, your build process must facilitate the installation of native modules. This is the default behavior with prebuild and autolinking.
-
-Then, install the iOS SDK. Change to the ios/ directory. In the Podfile, update platform :ios to 10.0 or higher. Then, run pod install. Learn about autolinking.
-
-Before writing any JavaScript, you must integrate the Radar SDK with your iOS and Android apps as described in the iOS SDK documentation and Android SDK documentation.
-
-iOS#
-You must add location usage descriptions and background modes to your Info.plist. For foreground permissions, you must add a value for NSLocationWhenInUseUsageDescription (Privacy - Location When In Use Usage Description). For background permissions, you must add a value for NSLocationAlwaysAndWhenInUseUsageDescription (Privacy - Location Always and When In Use Usage Description). These strings are displayed in permissions prompts.
-
-
-If you are planning to leverage background tracking, such as responsive or continuous mode, in your project settings, go to Signing & Capabilities, add Background Modes, and turn on Background fetch and Location updates. Note that this requires additional justification during App Store review. Learn more.
-
-
-Android#
-You must add Google Play Services Location to your app's build.gradle file (use version 21.0.1 or higher).
-
-implementation "com.google.android.gms:play-services-location:21.0.1"
-
-For background tracking without a foreground service, and if targeting API level 29 or higher, Radar also requires the ACCESS_BACKGROUND_LOCATION permission. You must add the ACCESS_BACKGROUND_LOCATION permission to your manifest manually:
-
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-
-    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
-
-</manifest>
-Expo#
-You can also use our Expo plugin to take care of the native setup. Add react-native-radar to plugins in app.json and specify one or more of the plugin options below:
-
-{
-  "expo": {
-    ...
-    "plugins": [
-      [
-        "react-native-radar",
-        {
-          // boolean to enable iOS fraud detection, defaults to false
-          "iosFraud": true,
-          // string used in iOS NSLocationWhenInUseUsageDescription prompt, required for foreground location permissions
-          "iosNSLocationWhenInUseUsageDescription": "Your foreground location usage description."
-          // string used in iOS NSLocationAlwaysAndWhenInUseUsageDescription prompt, required for background location permissions
-          "iosNSLocationAlwaysAndWhenInUseUsageDescription": "Your background location usage description.",
-          // boolean to enable iOS background location mode, required for .presetContinuous and .presetResponsive, defaults to false
-          "iosBackgroundMode": true,
-          // boolean to enable Android fraud detection, defaults to false
-          "androidFraud": true,
-          // boolean to enable Android background location permissions, defaults to false 
-          "androidBackgroundPermission": true,
-          // boolean to enable Android foreground location permissions, defaults to false
-          "androidFineLocationPermission": true,
-          // boolean to enable motion activity detection, defaults to false
-          "addRadarSDKMotion": true,
-          // string used in iOS NSMotionUsageDescription prompt, defaults to "This app uses the motion service to provide motion-based services."
-          "iosNSMotionUsageDescription": "Your motion usage description."
-        }
-      ],
-      // optional, only required if using Radar Maps
-      [
-        "@maplibre/maplibre-react-native"
-      ]
-    ]
-  }
-}
-Integrate#
-Import module#
-First, import the module:
-
-import Radar from 'react-native-radar';
-Initialize#
-When your app starts, initialize the SDK with your publishable key.
-
-Use your Test Publishable key for testing and non-production environments. Use your Live Publishable key for production environments.
-
-Note that you should always use your publishable API keys, which are restricted in scope, in the SDK. Do not use your secret API keys, which are unrestricted in scope, in any client-side code.
-Radar.initialize(publishableKey);
-Identify user#
-To identify the user when logged in, call:
-
-Radar.setUserId(userId);
-where userId is a stable unique ID for the user.
-
-To set an optional dictionary of custom metadata for the user, call:
-
-Radar.setMetadata(metadata);
-where metadata is a JSON object with up to 16 keys and values of type string, boolean, or number.
-
-Finally, to set an optional description for the user, displayed in the dashboard, call:
-
-Radar.setDescription(description);
-where description is a string.
-
-You only need to call these functions once, as these settings will be persisted across app sessions.
-
-Learn about platform-specific implementations of these functions in the iOS SDK documentation and Android SDK documentation.
-
-Debug logging#
-By default, only critical errors are logged to the console. To enable debug logging, call:
-
-Radar.setLogLevel('debug');
-Logging app lifecycle events is done in native platform code. Instructions for doing so on iOS can be found in the iOS SDK documentation. Logging app lifecycle events on Android happens automatically without any additional setup.
-
-Contact your customer success manager to enable logging app lifecycle events.
-Request permissions#
-Before tracking the user's location, the user must have granted location permissions for the app.
-
-To determine the whether user has granted location permissions for the app, call:
-
-Radar.getPermissionsStatus().then((status) => {
-  // do something with status
-});
-status will be a string, one of:
-
-GRANTED_BACKGROUND
-GRANTED_FOREGROUND
-NOT_DETERMINED
-DENIED
-To request location permissions for the app, call:
-
-Radar.requestPermissions(background).then((status) => {
-  // do something with status
-});
-where background is a boolean indicating whether to request background location permissions or foreground location permissions.
-
-On iOS and Android, the user needs to grant foreground location permissions first before you can prompt for background location permissions:
-
-// request foreground location permissions
-Radar.requestPermissions(false).then((status) => {
-  // request background location permissions
-  Radar.requestPermissions(true).then((status) => {
-    // do something with status
-  }).catch((err) => {
-    // optionally, do something with err
-  });
-}).catch((err) => {
-  // optionally, do something with err
-});
-Learn about platform-specific permissions in the iOS SDK documentation and Android SDK documentation.
-
-Build and run the app to make sure permissions prompts are displayed!
-Foreground tracking#
-Once you have initialized the SDK and the user has granted permissions, you can track the user's location.
-
-To track the user's location in the foreground, call:
-
-Radar.trackOnce().then((result) => {
-  // do something with result.location, result.events, result.user
-}).catch((err) => {
-  // optionally, do something with err
-});
-err will be a string, one of:
-
-ERROR_PUBLISHABLE_KEY: SDK not initialized
-ERROR_PERMISSIONS: location permissions not granted
-ERROR_LOCATION: location services error or timeout (10 seconds)
-ERROR_NETWORK: network error or timeout (10 seconds)
-ERROR_BAD_REQUEST: bad request (missing or invalid params)
-ERROR_UNAUTHORIZED: unauthorized (invalid API key)
-ERROR_PAYMENT_REQUIRED: payment required (organization disabled or usage exceeded)
-ERROR_FORBIDDEN: forbidden (insufficient permissions or no beta access)
-ERROR_NOT_FOUND: not found
-ERROR_RATE_LIMIT: too many requests (rate limit exceeded)
-ERROR_SERVER: internal server error
-ERROR_UNKNOWN: unknown error
-Learn about platform-specific implementations of this function in the iOS SDK documentation and Android SDK documentation.
-
-Background tracking#
-Once you have initialized the SDK and the user has granted permissions, you can start tracking the user's location in the background.
-
-For background tracking, the SDK supports custom tracking options as well as three presets:
-
-EFFICIENT: A low frequency of location updates and lowest battery usage. On Android, avoids Android vitals bad behavior thresholds.
-RESPONSIVE: A medium frequency of location updates and low battery usage. Suitable for most consumer use cases.
-CONTINUOUS: A high frequency of location updates and higher battery usage. Suitable for on-demand use cases (e.g., delivery tracking) and some consumer use cases (e.g., order ahead, "mall mode").
-Learn about platform-specific implementations of these presets in the iOS SDK documentation and Android SDK documentation.
-
-To start tracking the user's location in the background, call one of:
-
-Radar.startTrackingEfficient();
-
-Radar.startTrackingResponsive();
-
-Radar.startTrackingContinuous();
-You only need to call these methods once, as these settings will be persisted across app sessions.
-
-Though we recommend using presets for most use cases, you can customize the tracking options. See the tracking options reference.
-
-// optionally adjust foreground service options for android
-Radar.setForegroundServiceOptions({
-  options: {
-    text: "Location tracking started",
-    title: "Location updates",
-    updatesOnly: false,
-    importance: 2,
-    activity: 'com.yourapp.MainActivity'
-  }
-});
-
-Radar.startTrackingCustom({
-  desiredStoppedUpdateInterval: 180,
-  fastestStoppedUpdateInterval: 15,
-  desiredMovingUpdateInterval: 60,
-  fastestMovingUpdateInterval: 15,
-  desiredSyncInterval: 10,
-  desiredAccuracy: 'high',
-  stopDuration: 140,
-  stopDistance: 70,
-  sync: 'all',
-  replay: 'none',
-  useStoppedGeofence: true,
-  showBlueBar: true,
-  foregroundServiceEnabled: true
-});
-To determine whether tracking has been started, call:
-
-Radar.isTracking();
-To stop tracking the user's location in the background (e.g., when the user logs out), call:
-
-Radar.stopTracking();
-Learn about platform-specific implementations of these functions in the iOS SDK documentation and Android SDK documentation.
-
-To listen for events, location updates, and errors, you can add event listeners:
-
-Radar.on('clientLocation', (result) => {
-  // do something with result.location
-});
-
-Radar.on('location', (result) => {
-  // do something with result.location, result.user
-});
-
-Radar.on('events', (result) => {
-  // do something with result.events, result.user
-});
-
-Radar.on('error', (err) => {
-  // do something with err
-});
-Listeners should be set only once and before tracking begins.
-Add event listeners outside of your component lifecycle (e.g., outside of componentDidMount) if you want them to work when the app is in the background.
-
-You can also remove event listeners:
-
-Radar.off('clientLocation');
-
-Radar.off('location');
-
-Radar.off('events');
-
-Radar.off('error');
-Battery usage#
-Because React Native loads and parses your JavaScript bundle on each app launch, and because background tracking may launch the app in the background, background tracking with the React Native module can increase battery usage.
-
-On iOS, the app loads and parses the JavaScript bundle when the app is launched. If you do not want to receive events in JavaScript and you want to disable this in the background, check launchOptions for the UIApplicationLaunchOptionsLocationKey to conditionally parse and load the JavaScript bundle. Learn more about this key here.
-
-On Android, a receiver in the React Native module loads and parses the JavaScript bundle when the app is launched in the background. If you do not want to receive events in JavaScript and you want to disable this, add an override to your manifest:
-
-<receiver
-  tools:replace="android:enabled"
-  android:name="io.radar.react.RNRadarReceiver"
-  android:enabled="false"
-  android:exported="false" />
-Trip tracking#
-To start a trip to a destination, call:
-
-Radar.startTrip({
-  tripOptions: {
-    externalId: '299',
-    destinationGeofenceTag: 'store',
-    destinationGeofenceExternalId: '123',
-    mode: 'car'
-  },
-  trackingOptions:{
-    desiredStoppedUpdateInterval: 30,
-    fastestStoppedUpdateInterval: 30,
-    desiredMovingUpdateInterval: 30,
-    fastestMovingUpdateInterval: 30,
-    desiredSyncInterval: 20,
-    desiredAccuracy: "high",
-    stopDuration: 0,
-    stopDistance: 0,
-    replay: "none",
-    sync: "all",
-    showBlueBar: true,
-    syncGeofences: false,
-    syncGeofencesLimit: 0,
-    beacons: false,
-    foregroundServiceEnabled: true
-  }
-}).then((result) => {
-  // do something with result.status
-});
-Update information about the trip. Status can be set to 'unknown' to leave the status unchanged as it will update via location tracking.
-
-Radar.updateTrip({
-  status:'arrived',
-  options: {
-    externalId: '299',
-    metadata: {
-      parkingSpot: '5'
-    }
-  }
-}).then((result) => {
-  // do something with result.status
-});
-Later, complete the trip by calling:
-
-Radar.completeTrip().then((result) => {
-  // do something with result.status
-});
-Or, cancel the trip by calling:
-
-Radar.cancelTrip().then((result) => {
-  // do something with result.status
-});
-If tracking was disabled before the trip started, it will stop after the trip ends. Otherwise, it will revert to the tracking options in use before the trip started.
-
-Learn more about trip tracking.
-
-Manual tracking#
-You can manually update the user's location by calling:
-
-Radar.trackOnce({
-  latitude: 39.2904,
-  longitude: -76.6122,
-  accuracy: 65
-}).then((result) => {
-  // do something with result.events, result.user
-}).catch((err) => {
-  // optionally, do something with err
-});
-Learn about platform-specific implementation of this function in the iOS SDK documentation and Android SDK documentation.
-
-Location metadata#
-The SDK can also pass along information like motion activity detection, speed and heading via the location metadata field.
-
-Enable this feature with the Expo plugin by adding the following line into the app.json:
-
-{
-  "expo":{
-    ...
-    "plugins": [
-      [
-        "react-native-radar",
-        {
-          ...
-          "addRadarSDKMotion":true
-        }
-      ],
-      // optional, only required when you are also using Radar maps
-      ["@maplibre/maplibre-react-native"]
-    ]
-  }
-}
-Learn about platform-specific implementation of this function in the iOS SDK documentation and Android SDK documentation.
-
-Other APIs#
-The React Native module also exposes APIs for anonymous context, geocoding, search, and distance.
-
-Get location#
-Get a single location update without sending it to the server:
-
-Radar.getLocation().then((result) => {
-  // do something with result.location
-}).catch((err) => {
-  // optionally, do something with err
-});
-Context#
-With the context API, get context for a location without sending device or user identifiers to the server:
-
-Radar.getContext({
-  latitude: 40.783826,
-  longitude: -73.975363,
-  accuracy: 65
-}).then((result) => {
-  // do something with result.context
-}).catch((err) => {
-  // optionally, do something with err
-});
-Geocoding#
-With the forward geocoding API, geocode an address, converting address to coordinates:
-
-Radar.geocode('20 jay st brooklyn ny').then((result) => {
-  // do something with result.addresses
-}).catch((err) => {
-  // optionally, do something with err
-});
-With the reverse geocoding API, reverse geocode a location, converting coordinates to address:
-
-Radar.reverseGeocode({
-  latitude: 40.783826,
-  longitude: -73.975363
-}).then((result) => {
-  // do something with result.addresses
-}).catch((err) => {
-  // optionally, do something with err
-});
-With the IP geocoding API, geocode the device's current IP address, converting IP address to city, state, and country:
-
-Radar.ipGeocode().then((result) => {
-  // do something with result.address
-}).catch((err) => {
-  // optionally, do something with err
-});
-Search#
-With the autocomplete API, autocomplete partial addresses and place names, sorted by relevance:
-
-Radar.autocomplete({
-  query: 'brooklyn roasting',
-  near: {
-    latitude: 40.783826,
-    longitude: -73.975363
-  },
-  limit: 10
-}).then((result) => {
-  // do something with result.addresses
-}).catch((err) => {
-  // optionally, do something with err
-});
-With the geofence search API, search for geofences near a location, sorted by distance:
-
-Radar.searchGeofences({
-  radius: 1000,
-  tags: ['venue'],
-  limit: 10
-}).then((result) => {
-  // do something with result.geofences
-}).catch((err) => {
-  // optionally, do something with err
-});
-With the places search API, search for places near a location, sorted by distance:
-
-Radar.searchPlaces({
-  near: {
-    latitude: 40.783826,
-    longitude: -73.975363
-  },
-  radius: 1000,
-  chains: ['starbucks'],
-  limit: 10
-}).then((result) => {
-  // do something with result.places
-}).catch((err) => {
-  // optionally, do something with err
-});
-Distance#
-With the distance API, calculate the travel distance and duration from an origin to a destination:
-
-Radar.getDistance({
-  origin: {
-    latitude: 40.78382,
-    longitude: -73.97536
-  },
-  destination: {
-    latitude: 40.70390,
-    longitude: -73.98670
-  },
-  modes: [
-    'foot',
-    'car'
-  ],
-  units: 'imperial'
-}).then((result) => {
-  // do something with result.routes
-}).catch((err) => {
-  // optionally, do something with err
-});
-Matrix#
-With the matrix API, calculate the travel distance and duration between multiple origins and destinations for up to 25 routes:
-
-Radar.getMatrix({
-  origins: [
-    {
-      latitude: 40.78382,
-      longitude: -73.97536
-    },
-    {
-      latitude: 40.70390,
-      longitude: -73.98670
-    }
-  ],
-  destinations: [
-    {
-      latitude: 40.64189,
-      longitude: -73.78779
-    },
-    {
-      latitude: 35.99801,
-      longitude: -78.94294
-    }
-  ],
-  mode: 'car',
-  units: 'imperial'
-}).then((result) => {
-  // do something with result.matrix
-}).catch((err) => {
-  // optionally, do something with err
-});
-Conversions#
-With the conversions API, log a conversion, such as a purchase or signup, to analyze alongside your app's location activity:
-
-Radar.logConversion(
-  name,
-  metadata
-).then((result) => {
-  // do something with result.event
-}).catch((err) => {
-  // optionally, do something with err
-});
-
-// conversion with revenue
-Radar.logConversion(
-  name,
-  revenue,
-  metadata
-).then((result) => {
-  // do something with result.event
-}).catch((err) => {
-  // optionally, do something with err
-});
-To enable logging of app opens through notifications taps on iOS, perform the following native setup in the app's AppDelegate:
-
-- (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
-{
-  self.moduleName = @"main";
-  self.initialProps = @{};
-  BOOL result = [super application:application didFinishLaunchingWithOptions:launchOptions];
-  [Radar nativeSetup];
-  return result;
-}
-Notification options#
-On Android, you can call setNotificationOptions to set the icon and the background color of the foreground service and event notifications:
-
-// Set both foreground service and event notifications
-
-Radar.setNotificationOptions({
-  iconString: 'icon_1',
-  iconColor: 'color_1'
-});
-
-// Or, set the foreground service notification and event notifications separately
-
-Radar.setNotificationOptions({
-  foregroundServiceIconString: "icon_1",
-  foregroundServiceIconColor: "color_1",
-  eventIconString: "icon_2",
-  eventIconColor: "color_2",
-});
-iOS defaults to the standard notification icon.
-
-Maps and UI kits#
-The React Native SDK also has UI components for maps and address autocomplete. Learn more in the Maps Platform documentation.
-```
-
-```
-Tracking Options Reference
-For background tracking, Radar's SDK supports custom tracking options as well as three presets: EFFICIENT, RESPONSIVE, and CONTINUOUS.
-
-Configuring Tracking Options#
-While it's recommended to use one of the three optimized presets, custom parameters can also be passed at the time of tracking initialization. Additionally, you can also choose to forgo setting background tracking options as part of SDK initialization and override to any of the three preset on the Radar dashboard using Remote Tracking Options.
-
-Swift
-Objective-C
-Java
-Kotlin
-let trackingOptions = RadarTrackingOptions.presetResponsive
-trackingOptions.beacons = true
-Radar.startTracking(trackingOptions: trackingOptions)
-Tracking states#
-The SDK has two states: stopped and moving. After a location update is made, a user then occupies one of these two states. Tracking Options can be customized to alter the frequency of updates when a user is either stopped or moving. While less common to adjust, stopDuration and stopDistance are Tracking Options that alter the intervals after which a user is assumed to be stopped.
-
-iOS#
-iOS options#
-desiredStoppedUpdateInterval: Determines the desired location update interval in seconds when stopped. Use 0 to shut down when stopped. Defaults to 0.
-desiredMovingUpdateInterval: Determines the desired location update interval in seconds when moving. Defaults to 0. Note that location updates may be delayed significantly by Low Power Mode, or if the device has connectivity issues, low battery, or wi-fi disabled.
-desiredSyncInterval: Determines the desired sync interval in seconds. Defaults to 0.
-desiredAccuracy: Determines the desired accuracy of location updates. .high uses kCLLocationAccuracyBest, .medium uses kCLLocationAccuracyHundredMeters, .low uses kCLLocationAccuracyKilometer. Defaults to .medium.
-stopDuration: With stopDistance, determines the duration in seconds after which the device is considered stopped. Defaults to 0.
-stopDistance: With stopDuration, determines the distance in meters within which the device is considered stopped. Defaults to 0.
-startTrackingAfter: Determines when to start tracking. Use nil to start tracking when startTracking is called.
-stopTrackingAfter: Determines when to stop tracking. Use nil to track until stopTracking is called.
-replay: Determines which failed location updates to replay to the server. .all replays all location updates including those collected offline, .replayStops replays failed stops, .replayNone replays no location updates. Defaults to .replayNone.
-syncLocations: Determines which location updates to sync to the server. .all syncs all location updates to the server, .stopsAndExits syncs only stops and exits to the server, .none syncs no location updates to the server. Defaults to .all.
-showBlueBar: Determines whether the flashing blue status bar is shown when tracking. Defaults to false.
-useStoppedGeofence: Determines whether to use the iOS region monitoring service (geofencing) to create a client-side geofence "bubble" around the device's current location when stopped. Defaults to false.
-stoppedGeofenceRadius: Determines the radius in meters of the client-side geofence "bubble" around the device's current location when stopped. Use smaller values (e.g., 100 meters) for faster exit events or larger values (e.g., 200 meters) to avoid jumpy exits while stopped. Defaults to 0.
-useMovingGeofence: Determines whether to use the iOS region monitoring service (geofencing) to create a client-side geofence "bubble" around the device's current location when moving. Defaults to false.
-movingGeofenceRadius: Determines the radius in meters of the client-side geofence "bubble" around the device's current location when moving. Defaults to 0.
-syncGeofences: Determines whether to sync nearby geofences from the server to the client to improve responsiveness. Defaults to false.
-useVisits: Determines whether to use the iOS visit monitoring service. Defaults to false.
-useSignificantLocationChanges: Determines whether to use the iOS significant location change service. Defaults to false.
-beacons: Determines whether to monitor beacons. Defaults to false.
-iOS presets#
-RadarTrackingOptions.presetContinuous: Updates about every 30 seconds while moving or stopped. Moderate battery usage. Shows the flashing blue status bar during tracking.
-RadarTrackingOptions.presetResponsive: Updates about every 2.5 minutes when moving and shuts down when stopped to save battery. Once stopped, the device will need to move more than 100 meters to wake up and start moving again. Low battery usage. Requires the location background mode.
-RadarTrackingOptions.presetEfficient: Uses the iOS visit monitoring service to update only on stops and exits. Once stopped, the device will need to move several hundred meters and trigger a visit departure to wake up and start moving again. Lowest battery usage.
-Option	Efficient	Responsive	Continuous
-desiredStoppedUpdateInterval	0	0	30
-desiredMovingUpdateInterval	0	150	30
-desiredSyncInterval	0	20	20
-desiredAccuracy	.medium	.medium	.high
-stopDuration	0	140	140
-stopDistance	0	70	70
-startTrackingAfter	nil	nil	nil
-stopTrackingAfter	nil	nil	nil
-replay	.stops	.stops	.none
-syncLocations	.all	.all	.all
-showBlueBar	false	false	true
-useStoppedGeofence	false	true	false
-stoppedGeofenceRadius	0	100	0
-useMovingGeofence	false	true	false
-movingGeofenceRadius	0	100	0
-syncGeofences	true	true	true
-useVisits	true	true	false
-useSignificantLocationChanges	false	true	false
-beacons	false	false	false
-Android#
-Android options#
-desiredStoppedUpdateInterval: Determines the desired location update interval in seconds when stopped. Use 0 to shut down when stopped. Defaults to 0.
-fastestStoppedUpdateInterval: Determines the fastest location update interval in seconds when stopped. Defaults to 0.
-desiredMovingUpdateInterval: Determines the desired location update interval in seconds when moving. Defaults to 0. Note that location updates may be delayed significantly by Doze Mode, App Standby, and Background Location Limits, or if the device has connectivity issues, low battery, or wi-fi disabled. To avoid these restrictions, you can start a foreground service.
-fastestMovingUpdateInterval: Determines the fastest location update interval in seconds when moving. Defaults to 0.
-desiredSyncInterval: Determines the desired sync interval in seconds. Defaults to 0.
-desiredAccuracy: Determines the desired accuracy of location updates. HIGH uses PRIORITY_HIGH_ACCURACY, MEDIUM uses PRIORITY_BALANCED_POWER_ACCURACY, LOW uses PRIORITY_LOW_POWER, NONE uses PRIORITY_NO_POWER. Defaults to MEDIUM.
-stopDuration: With stopDistance, determines the duration in seconds after which the device is considered stopped. Defaults to 0.
-stopDistance: With stopDuration, determines the distance in meters within which the device is considered stopped. Defaults to 0.
-startTrackingAfter: Determines when to start tracking. Use null to start tracking when startTracking() is called.
-stopTrackingAfter: Determines when to stop tracking. Use null to track until stopTracking() is called.
-replay: Determines which failed location updates to replay to the server. ALL replays all location updates including those collected offline, STOPS replays failed stops, NONE replays no location updates. Defaults to NONE.
-sync: Determines which location updates to sync to the server. ALL syncs all location updates to the server, STOPS_AND_EXITS syncs only stops and exits to the server, NONE syncs no location updates to the server. Defaults to STOPS_AND_EXITS.
-useStoppedGeofence: Determines whether to create a client-side geofence "bubble" around the device's current location when stopped. Defaults to false.
-stoppedGeofenceRadius: Determines the radius in meters of the client-side geofence "bubble" around the device's current location when stopped. Use smaller values (e.g., 100 meters) for faster exit events or larger values (e.g., 200 meters) to avoid jumpy exits while stopped. Defaults to 0.
-useMovingGeofence: Determines whether to create a client-side geofence "bubble" around the device's current location when moving. Defaults to false.
-movingGeofenceRadius: Determines the radius in meters of the client geofence around the device's current location when moving. Defaults to 0.
-syncGeofences: Determines whether to sync nearby geofences from the server to the client to improve responsiveness. Defaults to false.
-syncGeofencesLimit: Determines how many nearby geofences to sync from the server to the client when syncGeofences is enabled. Defaults to 0.
-foregroundService: If set, starts a foreground service and shows a notification during tracking. Deprecated in Android SDK 3.4.1.
-foregroundServiceEnabled: If set, starts a foreground service and shows a notification during tracking. Defaults to false.
-beacons: Determines whether to monitor beacons. Defaults to false.
-Android foreground service options#
-To avoid Background Location Limits, you can start a foreground service and show a notification during tracking. If using Android SDK < 3.4.1, set trackingOptions.foregroundService to an instance of RadarTrackingOptionsForegroundService. If using Android SDK >= 3.4.1, use Radar.setForegroundServiceOptions() to customize the foreground service notification appearance passing in an instance of RadarTrackingOptionsForegroundService.
-
-text: Determines the notification text. Defaults to "Location tracking started".
-title: Determines the notification title. Optional.
-icon: Determines the notification icon via Android's identifier for the resource (e.g., 2131558400). Optional, defaults to iconString. Deprecated in Android SDK 3.8.14.
-iconString: Determines the notification icon, like R.drawable.ic_your_icon. Optional, defaults to applicationContext.applicationInfo.icon.
-iconColor: Determines the color of the notification icon. Optional.
-updatesOnly: Determines when to show the notification. Use false to show the notification always, use true to show the notification only during location updates. Optional, defaults to false.
-activity: Determines the activity to start when the notification is tapped, like "com.yourapp.MainActivity". Optional.
-importance: Determines the importance of the notification, one of android.app.NotificationManager.IMPORTANCE_*. Optional, defaults to android.app.NotificationManager.IMPORTANCE_DEFAULT.
-id: Determines the id of the notification. Optional, defaults to 20160525.
-channelName: Determines the name of the notification channel. Optional, defaults to "Location Services".
-Kotlin
-React Native
-Radar.setForegroundServiceOptions(RadarTrackingOptions.RadarTrackingOptionsForegroundService(
-  text="Text",
-  title="Title",
-  iconString="your_icon_name",
-  updatesOnly=true,
-))
-Android presets#
-RadarTrackingOptions.CONTINUOUS: Updates about every 30 seconds while moving or stopped. Starts a foreground service. Moderate battery usage.
-RadarTrackingOptions.RESPONSIVE: Updates about every 2.5 minutes while moving and shuts down when stopped to save battery. Once stopped, the device will need to move more than 100 meters to wake up and start moving again. Low battery usage, but may exceed Android vitals bad behavior thresholds for excessive wakeups and excessive wi-fi scans.
-RadarTrackingOptions.EFFICIENT: Updates as fast as every 6 minutes while moving and periodically when stopped. Once stopped, the device will need to move more than 100 meters and wait for at least 15 minutes to wake up and start moving again. Lowest battery usage and will not exceed Android vitals bad behavior thresholds.
-Option	Efficient	Responsive	Continuous
-desiredStoppedUpdateInterval	3600	0	30
-fastestStoppedUpdateInterval	1200	0	30
-desiredMovingUpdateInterval	1200	150	30
-fastestMovingUpdateInterval	360	30	30
-desiredSyncInterval	140	20	20
-desiredAccuracy	MEDIUM	MEDIUM	HIGH
-stopDuration	140	140	140
-stopDistance	70	70	70
-startTrackingAfter	null	null	null
-stopTrackingAfter	null	null	null
-replay	STOPS	STOPS	NONE
-sync	ALL	ALL	ALL
-useStoppedGeofence	false	true	false
-stoppedGeofenceRadius	0	100	0
-useMovingGeofence	false	true	false
-movingGeofenceRadius	0	100	0
-syncGeofences	true	true	true
-syncGeofencesLimit	10	10	0
-foregroundServiceEnabled	false	false	true
-beacons	false	false	false
-```
+This setup appears to work. And I now want to implement the main features of the UI. I am hesitant between using `react-map-gl` or normal Mapbox GL JS for my app. I will need the map to be able to display the live location of all the user's that have shared their location using custom markers, and have them animate to new positions when updated. I will also need to be able to handle "opening" those markers to see more details and options. Which should I pick?

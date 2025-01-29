@@ -9,16 +9,20 @@ export default function HomeScreen() {
   const [currentLocation, setCurrentLocation] = useState(null);
 
   useEffect(() => {
-    // Optionally, get a quick "foreground" location update
-    Radar.trackOnce()
-      .then((result) => {
-        if (result.location) {
-          setCurrentLocation(result.location);
-        }
-      })
-      .catch((err) => {
-        console.log('Radar trackOnce error =>', err);
-      });
+    // Example: track once every 10s while in foreground
+    const intervalId = setInterval(() => {
+      Radar.trackOnce({desiredAccuracy: 'high'})
+        .then((result) => {
+          if (result.location) {
+            setCurrentLocation(result.location);
+          }
+        })
+        .catch((err) => {
+          console.log('Radar trackOnce error =>', err);
+        });
+    }, 10_000);
+
+    return () => clearInterval(intervalId);
   }, []);
 
   const handleSignOut = async () => {
