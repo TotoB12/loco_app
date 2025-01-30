@@ -53,8 +53,14 @@ export default function HomeScreen() {
       {/* Full-screen Map */}
       <MapView
         style={StyleSheet.absoluteFillObject}
-        attributionEnabled={false}      // Hide "Mapbox" attribution
-        logoEnabled={false}             // Hide Mapbox logo
+        attributionEnabled={false}
+        logoEnabled={false}  
+        scaleBarEnabled={false}
+        compassEnabled={true}
+        compassViewPosition={1}
+        compassViewMargins={{ x: 15, y: 50 }}
+        compassFadeWhenNorth={true}
+        
       >
         {/* Camera that follows user location */}
         <Camera
@@ -74,7 +80,7 @@ export default function HomeScreen() {
         />
       </MapView>
 
-      {/* Current location text overlaid at top-left */}
+      {/* Current location text overlaid at bottom-right */}
       <View style={styles.locationInfo}>
         {currentLocation ? (
           <Text style={styles.locationText}>

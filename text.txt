@@ -177,14 +177,23 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { signOut } from 'firebase/auth';
 import { auth } from '../firebaseConfig';
 import Radar from 'react-native-radar';
+import Mapbox, { MapView, Camera, LocationPuck } from '@rnmapbox/maps';
 
 export default function HomeScreen() {
   const [currentLocation, setCurrentLocation] = useState(null);
 
+  // ------------------------------
+  //  Mapbox Token & Telemetry
+  // ------------------------------
   useEffect(() => {
-    // Example: track once every 10s while in foreground
+    Mapbox.setAccessToken('pk.eyJ1IjoidG90b2IxMjE3IiwiYSI6ImNsbXo4NHdocjA4dnEya215cjY0aWJ1cGkifQ.OMzA6Q8VnHLHZP-P8ACBRw');
+    Mapbox.setTelemetryEnabled(false);
+  }, []);
+
+  useEffect(() => {
+    // track once every 10s while in foreground
     const intervalId = setInterval(() => {
-      Radar.trackOnce({desiredAccuracy: 'high'})
+      Radar.trackOnce({ desiredAccuracy: 'high' })
         .then((result) => {
           if (result.location) {
             setCurrentLocation(result.location);
@@ -198,6 +207,9 @@ export default function HomeScreen() {
     return () => clearInterval(intervalId);
   }, []);
 
+  // ------------------------------
+  //  Sign out logic
+  // ------------------------------
   const handleSignOut = async () => {
     try {
       await signOut(auth);
@@ -206,53 +218,92 @@ export default function HomeScreen() {
     }
   };
 
+  // ------------------------------
+  //  Render
+  // ------------------------------
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Thanks for testing!</Text>
-      {currentLocation ? (
-        <Text style={styles.text}>
-          Foreground location:
-          {'\n'}Lat: {currentLocation.latitude}, Lng: {currentLocation.longitude}
-        </Text>
-      ) : (
-        <Text style={styles.text}>No location yet...</Text>
-      )}
-      <TouchableOpacity style={styles.button} onPress={handleSignOut}>
-        <Text style={styles.buttonText}>Log Out</Text>
+      {/* Full-screen Map */}
+      <MapView
+        style={StyleSheet.absoluteFillObject}
+        attributionEnabled={false}
+        logoEnabled={false}  
+        scaleBarEnabled={false}
+        compassEnabled={true}
+        compassViewPosition={1}
+        compassViewMargins={{ x: 15, y: 50 }}
+        compassFadeWhenNorth={true}
+        
+      >
+        {/* Camera that follows user location */}
+        <Camera
+          followUserLocation
+          followZoomLevel={14}
+        />
+        {/* Shows a blue dot for user location */}
+        <LocationPuck
+          topImage="topImage"
+          visible={true}
+          scale={['interpolate', ['linear'], ['zoom'], 10, 1.0, 20, 4.0]}
+          pulsing={{
+            isEnabled: true,
+            color: 'teal',
+            radius: 50.0,
+          }}
+        />
+      </MapView>
+
+      {/* Current location text overlaid at bottom-right */}
+      <View style={styles.locationInfo}>
+        {currentLocation ? (
+          <Text style={styles.locationText}>
+            Lat: {currentLocation.latitude.toFixed(6)}{'\n'}
+            Lng: {currentLocation.longitude.toFixed(6)}
+          </Text>
+        ) : (
+          <Text style={styles.locationText}>No location yet...</Text>
+        )}
+      </View>
+
+      {/* Sign out button overlaid at bottom-left */}
+      <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
+        <Text style={styles.signOutText}>Log Out</Text>
       </TouchableOpacity>
     </View>
   );
 }
 
-// Basic styles
+// ------------------------------
+//  Styles
+// ------------------------------
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#212832',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  title: {
-    fontSize: 28,
+  locationInfo: {
+    position: 'absolute',
+    bottom: 40,
+    right: 15,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    padding: 8,
+    borderRadius: 5,
+  },
+  locationText: {
     color: '#fff',
-    marginBottom: 20,
+    textAlign: 'left',
   },
-  text: {
-    color: '#fff',
-    marginBottom: 20,
-    textAlign: 'center'
-  },
-  button: {
-    width: 150,
-    height: 50,
+  signOutButton: {
+    position: 'absolute',
+    bottom: 40,
+    left: 15,
     backgroundColor: '#f54242',
     borderRadius: 5,
-    alignItems: 'center',
-    justifyContent: 'center',
+    paddingHorizontal: 15,
+    paddingVertical: 10,
   },
-  buttonText: {
+  signOutText: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: 16,
   },
 });
 ```
@@ -583,7 +634,7 @@ package.json
 {
   "name": "loco",
   "license": "0BSD",
-  "version": "1.0.0",
+  "version": "0.1.3",
   "main": "index.js",
   "scripts": {
     "start": "expo start --dev-client",
@@ -595,6 +646,8 @@ package.json
     "@react-native-async-storage/async-storage": "1.23.1",
     "@react-navigation/native": "^7.0.14",
     "@react-navigation/stack": "^7.1.1",
+    "@rnmapbox/maps": "^10.1.33",
+    "dotenv": "^16.4.7",
     "expo": "~52.0.24",
     "expo-background-fetch": "~13.0.4",
     "expo-dev-client": "~5.0.9",
@@ -606,6 +659,7 @@ package.json
     "react-native": "0.76.5",
     "react-native-gesture-handler": "~2.20.2",
     "react-native-keyboard-aware-scroll-view": "^0.9.5",
+    "react-native-maps": "1.18.0",
     "react-native-radar": "^3.19.1",
     "react-native-safe-area-context": "4.12.0",
     "react-native-screens": "~4.4.0"
@@ -619,8 +673,11 @@ package.json
 
 app.json
 ```json
-{
-  "expo": {
+import 'dotenv/config';
+
+export default ({ config }) => {
+  return {
+    ...config,
     "name": "loco",
     "slug": "loco",
     "version": "0.1.3",
@@ -632,6 +689,15 @@ app.json
       "resizeMode": "contain",
       "backgroundColor": "#212832"
     },
+    "newArchEnabled": false,
+    "experiments": {
+      "turboModules": false,
+      "coreModules": false,
+      "unoptimizedReports": false,
+      "enableAsyncDefaults": false,
+      "concurrentRoot": false,
+      "fabric": false
+    },
     "plugins": [
       [
         "react-native-radar",
@@ -640,9 +706,23 @@ app.json
           "iosNSLocationWhenInUseUsageDescription": "We use your location to help share your position in real-time.",
           "iosNSLocationAlwaysAndWhenInUseUsageDescription": "Background location is used so your friends can see your location even if the app is closed.",
           "iosBackgroundMode": true,
+          "androidFraud": true,
           "androidBackgroundPermission": true,
           "androidFineLocationPermission": true,
           "addRadarSDKMotion": false
+        }
+      ],
+      [
+        "@rnmapbox/maps",
+        {
+          "RNMapboxMapsDownloadToken": process.env.MAPBOX_DOWNLOADS_TOKEN,
+          "RNMapboxMapsVersion": "11.0.0"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Show current location on map."
         }
       ]
     ],
@@ -652,10 +732,17 @@ app.json
         "UIBackgroundModes": [
           "location",
           "fetch"
-        ]
-      }
+        ],
+        "NSLocationWhenInUseUsageDescription": "Show current location on map",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Background location usage..."
+      },
+      "config": {
+        "googleMapsApiKey": "AIzaSyCCkJk7m5UqYt9_dHHxjA0zzvWKadSn41U"
+      },
     },
     "android": {
+      "package": "com.antoninbeliard.loco",
+      "icon": "./assets/icon.png",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#212832"
@@ -668,155 +755,23 @@ app.json
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_BACKGROUND_LOCATION",
         "android.permission.FOREGROUND_SERVICE"
-      ]
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyAgtPIWpSfr1a2dxUdBxXVw7Xah1yqL9YQ"
+        }
+      }
     },
     "extra": {
       "eas": {
         "projectId": "eacea42d-f4e8-4a94-b43a-f19dc934865e"
       }
     }
-  }
-}
+  };
+};
 ```
 
-This setup appears to work. And I now want to implement the main features of the UI. Firstly, the map. It should cover the entire screen, and use `@rnmapbox/maps`. I want the sign out button to be in the bottom left. I want this to be made entirely in the home screen, without removing any of the previously implemented features. I want you to fully develop and implement this. Do not have the map do anything else for now. Here is some documentation to help:
-
-```
-Getting Started
-Congratulations, you successfully installed rnmapbox/maps! 🎉 Where to go from here? You can head straight to examples folder if you want to jump into the deep end. However, if you prefer an easier ramp-up, then make sure to stick around and check out the guides below.
-
-Installation
-Please follow our install guides for the platforms you're interested in (ios, android, expo): https://rnmapbox.github.io/docs/install
-
-Setting your accessToken
-In order to work, mapbox requires you to create an accessToken and set it in your app. If you haven't created one yet, make sure to sign up for an account here You can create and manage your access tokens on your Mapbox Account page Once you have your accessToken, set it like this
-
-import Mapbox from "@rnmapbox/maps";
-
-Mapbox.setAccessToken("<YOUR_ACCESSTOKEN>");
-Setting connection status [Android only]
-If you are hosting styles and sources on localhost, you might need to set the connection status manually for Mapbox to be able to use them. See mapbox/mapbox-gl-native#12819.
-
-Manually sets the connectivity state of the app, bypassing any checks to the ConnectivityManager. Set to true for connected, false for disconnected, and null for ConnectivityManager to determine.
-
-import Mapbox from "@rnmapbox/maps";
-
-Mapbox.setConnected(true);
-Disabling Telemetry
-By default mapbox collects telemetry. If you would like to programmatically disable this within your app add the code below.
-
-  componentDidMount() {
-    Mapbox.setTelemetryEnabled(false);
-  }
-For more information on mapbox and telemetry: https://www.mapbox.com/telemetry
-
-Show a map
-import React, { Component } from "react";
-import { StyleSheet, View } from "react-native";
-import Mapbox, {MapView} from "@rnmapbox/maps";
-
-Mapbox.setAccessToken("<YOUR_ACCESSTOKEN>");
-
-const styles = StyleSheet.create({
-  page: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#F5FCFF"
-  },
-  container: {
-    height: 300,
-    width: 300,
-    backgroundColor: "tomato"
-  },
-  map: {
-    flex: 1
-  }
-});
-
-export default class App extends Component {
-  componentDidMount() {
-    Mapbox.setTelemetryEnabled(false);
-  }
-
-  render() {
-    return (
-      <View style={styles.page}>
-        <View style={styles.container}>
-          <MapView style={styles.map} />
-        </View>
-      </View>
-    );
-  }
-}
-```
-
-```
-Map and React Navigation
-Demonstrates various ways to embedd map via (Navigation, Page, modal, etc)
-
-import React, { useState } from 'react';
-import { Button, Modal, Text, SafeAreaView } from 'react-native';
-import { MapView, UserLocation, Camera } from '@rnmapbox/maps';
-
-/**
- * @param {ItempProps['navigation']} navigation
- */
-export default function MapAndNavigation({ navigation }) {
-  const [modalVisible, setModalVisible] = useState(false);
-  const [showMap, setShowMap] = useState(false);
-
-  return (
-    <>
-      <Button title="Modal" onPress={() => setModalVisible(true)} />
-      <Button
-        title="Toggle map"
-        onPress={() => setShowMap((showMap) => !showMap)}
-      />
-      <Button
-        title="Navigate"
-        onPress={() => navigation.navigate('ScreenWithoutMap')}
-      />
-      <Modal
-        animationType="slide"
-        transparent={false}
-        visible={modalVisible}
-        onRequestClose={() => {
-          setModalVisible(false);
-        }}
-      >
-        <SafeAreaView style={{ flex: 1 }}>
-          <Text>this is a modal</Text>
-          <Button
-            title="close"
-            onPress={() => {
-              setModalVisible(false);
-            }}
-          />
-          <MapView style={{ flex: 1 }} />
-        </SafeAreaView>
-      </Modal>
-      {showMap && (
-        <MapView style={{ flex: 1 }}>
-          <Camera
-            centerCoordinate={[-74.00597, 40.71427]}
-            zoomLevel={14}
-            followUserLocation
-            followZoomLevel={14}
-          />
-          <UserLocation
-            androidRenderMode={'gps'}
-            showsUserHeadingIndicator={true}
-            renderMode={'native'}
-          />
-        </MapView>
-      )}
-    </>
-  );
-}
-```
-
-Do not show any attribution and disable telemetry if possible.
+This setup appears to work. But I want to improve the UI. I want the top of home page to fade gradually going up, and to have two buttons: a settings on the left and a friends on the right. I want to use `@expo/vector-icons`: <MaterialIcons name="settings" size={24} color="black" /> and <FontAwesome5 name="user-friends" size={24} color="black" />. I want you to fully develop and implement this. Do not have the buttons do anything for now. Have them be black, with a white circular background.
 
 When the app opens, I need the map to not be loaded: I want the script to make an initial `Radar.trackOnce` request:
 - if it succeds, load the map zoomed in at this initial user location.

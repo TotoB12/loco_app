@@ -40,7 +40,7 @@ export default ({ config }) => {
       [
         "@rnmapbox/maps",
         {
-          "RNMapboxMapsDownloadToken": "sk.eyJ1IjoidG90b2IxMjE3IiwiYSI6ImNtNmltOGd3cDA5c3gydm9vNmk3ZXh2cWEifQ.LejajWlcxf226PnDlCWGBA",
+          "RNMapboxMapsDownloadToken": process.env.MAPBOX_DOWNLOADS_TOKEN,
           "RNMapboxMapsVersion": "11.0.0"
         }
       ],
