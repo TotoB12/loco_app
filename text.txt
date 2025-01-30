@@ -177,7 +177,9 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { signOut } from 'firebase/auth';
 import { auth } from '../firebaseConfig';
 import Radar from 'react-native-radar';
-import Mapbox, { MapView, Camera, LocationPuck } from '@rnmapbox/maps';
+import Mapbox, { MapView, LocationPuck } from '@rnmapbox/maps';
+import { MaterialIcons } from '@expo/vector-icons';
+import { FontAwesome5 } from '@expo/vector-icons';
 
 export default function HomeScreen() {
   const [currentLocation, setCurrentLocation] = useState(null);
@@ -190,6 +192,9 @@ export default function HomeScreen() {
     Mapbox.setTelemetryEnabled(false);
   }, []);
 
+  // ------------------------------
+  //  Radar foreground tracking
+  // ------------------------------
   useEffect(() => {
     // track once every 10s while in foreground
     const intervalId = setInterval(() => {
@@ -227,19 +232,14 @@ export default function HomeScreen() {
       <MapView
         style={StyleSheet.absoluteFillObject}
         attributionEnabled={false}
-        logoEnabled={false}  
+        logoEnabled={false}
         scaleBarEnabled={false}
         compassEnabled={true}
         compassViewPosition={1}
-        compassViewMargins={{ x: 15, y: 50 }}
-        compassFadeWhenNorth={true}
-        
+        compassViewMargins={{ x: 15, y: 64 }}
+        compassFadeWhenNorth={false}
       >
-        {/* Camera that follows user location */}
-        <Camera
-          followUserLocation
-          followZoomLevel={14}
-        />
+
         {/* Shows a blue dot for user location */}
         <LocationPuck
           topImage="topImage"
@@ -252,6 +252,31 @@ export default function HomeScreen() {
           }}
         />
       </MapView>
+
+      {/* Top row with Settings (left) and Friends (right) buttons */}
+      <View style={styles.topRow}>
+        {/* Settings Button */}
+        <TouchableOpacity
+          style={styles.iconButton}
+          onPress={() => {
+            // Add your own navigation or logic here
+            console.log('Settings pressed');
+          }}
+        >
+          <MaterialIcons name="settings" size={24} color="black" />
+        </TouchableOpacity>
+
+        {/* Friends Button */}
+        <TouchableOpacity
+          style={styles.iconButton}
+          onPress={() => {
+            // Add your own navigation or logic here
+            console.log('Friends pressed');
+          }}
+        >
+          <FontAwesome5 name="user-friends" size={20} color="black" />
+        </TouchableOpacity>
+      </View>
 
       {/* Current location text overlaid at bottom-right */}
       <View style={styles.locationInfo}>
@@ -279,6 +304,33 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  // Container that holds the two top icons
+  topRow: {
+    position: 'absolute',
+    top: 10,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 15,
+    zIndex: 999, // ensure above map
+  },
+  // White circular background for each icon
+  iconButton: {
+    width: 47,
+    height: 47,
+    borderRadius: 25,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    // Optional shadow on iOS
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    // Optional elevation on Android
+    elevation: 3,
   },
   locationInfo: {
     position: 'absolute',
@@ -643,6 +695,7 @@ package.json
     "web": "expo start --web"
   },
   "dependencies": {
+    "@expo/vector-icons": "^14.0.2",
     "@react-native-async-storage/async-storage": "1.23.1",
     "@react-navigation/native": "^7.0.14",
     "@react-navigation/stack": "^7.1.1",
@@ -771,8 +824,9 @@ export default ({ config }) => {
 };
 ```
 
-This setup appears to work. But I want to improve the UI. I want the top of home page to fade gradually going up, and to have two buttons: a settings on the left and a friends on the right. I want to use `@expo/vector-icons`: <MaterialIcons name="settings" size={24} color="black" /> and <FontAwesome5 name="user-friends" size={24} color="black" />. I want you to fully develop and implement this. Do not have the buttons do anything for now. Have them be black, with a white circular background.
+This setup appears to work. But I want to improve the UX. When the app opens, before the checks are made to see if the user is logged in or not, I need the app to have a permission check: the app should ensure it has both "allow location while using the app" and "allow all the time" turned on. I need it to check this (without using Radar's functions), and then:
 
-When the app opens, I need the map to not be loaded: I want the script to make an initial `Radar.trackOnce` request:
-- if it succeds, load the map zoomed in at this initial user location.
-- if it fails, instead of the map, show a message saying "Grant Loco location permissions."
+- if the app has both of them, it can proceed as usual (check for account, login/signup page or home screen)
+- if "allow all the time" is not authorized, the loading screen should show a warning message telling the user to enable it, allong with a button to open the settings for the app.
+
+I want you to fully develop and implement this. This should be enough to garante permissions right? No other part of the app should be loaded right?

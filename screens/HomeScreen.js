@@ -4,7 +4,9 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { signOut } from 'firebase/auth';
 import { auth } from '../firebaseConfig';
 import Radar from 'react-native-radar';
-import Mapbox, { MapView, Camera, LocationPuck } from '@rnmapbox/maps';
+import Mapbox, { MapView, LocationPuck } from '@rnmapbox/maps';
+import { MaterialIcons } from '@expo/vector-icons';
+import { FontAwesome5 } from '@expo/vector-icons';
 
 export default function HomeScreen() {
   const [currentLocation, setCurrentLocation] = useState(null);
@@ -17,6 +19,9 @@ export default function HomeScreen() {
     Mapbox.setTelemetryEnabled(false);
   }, []);
 
+  // ------------------------------
+  //  Radar foreground tracking
+  // ------------------------------
   useEffect(() => {
     // track once every 10s while in foreground
     const intervalId = setInterval(() => {
@@ -54,19 +59,14 @@ export default function HomeScreen() {
       <MapView
         style={StyleSheet.absoluteFillObject}
         attributionEnabled={false}
-        logoEnabled={false}  
+        logoEnabled={false}
         scaleBarEnabled={false}
         compassEnabled={true}
         compassViewPosition={1}
-        compassViewMargins={{ x: 15, y: 50 }}
-        compassFadeWhenNorth={true}
-        
+        compassViewMargins={{ x: 15, y: 64 }}
+        compassFadeWhenNorth={false}
       >
-        {/* Camera that follows user location */}
-        <Camera
-          followUserLocation
-          followZoomLevel={14}
-        />
+
         {/* Shows a blue dot for user location */}
         <LocationPuck
           topImage="topImage"
@@ -79,6 +79,31 @@ export default function HomeScreen() {
           }}
         />
       </MapView>
+
+      {/* Top row with Settings (left) and Friends (right) buttons */}
+      <View style={styles.topRow}>
+        {/* Settings Button */}
+        <TouchableOpacity
+          style={styles.iconButton}
+          onPress={() => {
+            // Add your own navigation or logic here
+            console.log('Settings pressed');
+          }}
+        >
+          <MaterialIcons name="settings" size={24} color="black" />
+        </TouchableOpacity>
+
+        {/* Friends Button */}
+        <TouchableOpacity
+          style={styles.iconButton}
+          onPress={() => {
+            // Add your own navigation or logic here
+            console.log('Friends pressed');
+          }}
+        >
+          <FontAwesome5 name="user-friends" size={20} color="black" />
+        </TouchableOpacity>
+      </View>
 
       {/* Current location text overlaid at bottom-right */}
       <View style={styles.locationInfo}>
@@ -106,6 +131,33 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  // Container that holds the two top icons
+  topRow: {
+    position: 'absolute',
+    top: 10,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 15,
+    zIndex: 999, // ensure above map
+  },
+  // White circular background for each icon
+  iconButton: {
+    width: 47,
+    height: 47,
+    borderRadius: 25,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    // Optional shadow on iOS
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    // Optional elevation on Android
+    elevation: 3,
   },
   locationInfo: {
     position: 'absolute',
