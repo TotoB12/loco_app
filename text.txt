@@ -679,99 +679,7 @@ app.json
 }
 ```
 
-This setup appears to work. And I now want to implement the main features of the UI. Firstly, the map. It should cover the entire screen, and use "Mapbox Maps SDK for React Native". I want you to fully develop and implement this. Do not have the map do anything else for now. Here is some documentation to help:
-
-```
-Expo Installation
-⚠️ This package cannot be used in the "Expo Go" app because it requires custom native code.
-
-First install the package with expo, yarnor npm.
-
-Install the latest release:
-
-expo install @rnmapbox/maps
-Plugin Configuration
-After installing this package, add the config plugin to the plugins array of your app.{json,config.js,config.ts}:
-
-{
-  "expo": {
-    "plugins": [
-      [
-        "@rnmapbox/maps",
-        {
-          "RNMapboxMapsVersion": "11.8.0"
-        }
-      ]
-    ]
-  }
-}
-You'll need to provide RNMapboxMapsDownloadToken as well. This secret token requires the DOWNLOADS:READ scope. You can refer to the iOS guide, which explains how to configure this token under the section Configure your secret token.
-
-{
-  "expo": {
-    "plugins": [
-      [
-        "@rnmapbox/maps",
-        {
-          "RNMapboxMapsDownloadToken": "sk.ey...qg"
-        }
-      ]
-    ]
-  }
-}
-If you want to show the user's current location on the map with the UserLocation component, you can use the expo-location plugin to configure the required NSLocationWhenInUseUsageDescription property. Install the plugin with npx expo install expo-location and add its config plugin to the plugins array of your app.{json,config.js,config.ts}:
-
-{
-  "expo": {
-    "plugins": [
-      [
-        "expo-location",
-        {
-          "locationWhenInUsePermission": "Show current location on map."
-        }
-      ]
-    ]
-  }
-}
-Next, rebuild your app as described in the "Adding custom native code" guide.
-
-Advanced Configuration
-It's possible to overwrite the native SDK version with RNMapboxMapsVersion:
-
-{
-  "expo": {
-    "plugins": [
-      [
-        "@rnmapbox/maps",
-        {
-          "RNMapboxMapsVersion": "10.16.2",
-          "RNMapboxMapsDownloadToken": "sk.ey...qg"
-        }
-      ]
-    ]
-  }
-}
-To use V11 just set the version to a 11 version, see the ios guide:
-
-{
-  "expo": {
-    "plugins": [
-      [
-        "@rnmapbox/maps",
-        {
-          "RNMapboxMapsVersion": "11.8.0",
-          "RNMapboxMapsDownloadToken": "sk.ey...qg",
-        }
-      ]
-    ]
-  }
-}
-Manual Setup
-For bare workflow projects, you can follow the manual setup guides:
-
-iOS
-Android
-```
+This setup appears to work. And I now want to implement the main features of the UI. Firstly, the map. It should cover the entire screen, and use `@rnmapbox/maps`. I want the sign out button to be in the bottom left. I want this to be made entirely in the home screen, without removing any of the previously implemented features. I want you to fully develop and implement this. Do not have the map do anything else for now. Here is some documentation to help:
 
 ```
 Getting Started
@@ -844,86 +752,68 @@ export default class App extends Component {
 ```
 
 ```
-Expo Installation
-⚠️ This package cannot be used in the "Expo Go" app because it requires custom native code.
+Map and React Navigation
+Demonstrates various ways to embedd map via (Navigation, Page, modal, etc)
 
-First install the package with expo, yarnor npm.
+import React, { useState } from 'react';
+import { Button, Modal, Text, SafeAreaView } from 'react-native';
+import { MapView, UserLocation, Camera } from '@rnmapbox/maps';
 
-Install the latest release:
+/**
+ * @param {ItempProps['navigation']} navigation
+ */
+export default function MapAndNavigation({ navigation }) {
+  const [modalVisible, setModalVisible] = useState(false);
+  const [showMap, setShowMap] = useState(false);
 
-expo install @rnmapbox/maps
-Installing other versions
-Replace @rnmapbox/maps with the following to install other versions:
-
-rnmapbox/maps#main installs the latest source from git
-Plugin Configuration
-After installing this package, add the config plugin to the plugins array of your app.{json,config.js,config.ts}:
-
-{
-  "expo": {
-    "plugins": [
-      [
-        "@rnmapbox/maps",
-        {
-          "RNMapboxMapsImpl": "maplibre"
-        }
-      ]
-    ]
-  }
+  return (
+    <>
+      <Button title="Modal" onPress={() => setModalVisible(true)} />
+      <Button
+        title="Toggle map"
+        onPress={() => setShowMap((showMap) => !showMap)}
+      />
+      <Button
+        title="Navigate"
+        onPress={() => navigation.navigate('ScreenWithoutMap')}
+      />
+      <Modal
+        animationType="slide"
+        transparent={false}
+        visible={modalVisible}
+        onRequestClose={() => {
+          setModalVisible(false);
+        }}
+      >
+        <SafeAreaView style={{ flex: 1 }}>
+          <Text>this is a modal</Text>
+          <Button
+            title="close"
+            onPress={() => {
+              setModalVisible(false);
+            }}
+          />
+          <MapView style={{ flex: 1 }} />
+        </SafeAreaView>
+      </Modal>
+      {showMap && (
+        <MapView style={{ flex: 1 }}>
+          <Camera
+            centerCoordinate={[-74.00597, 40.71427]}
+            zoomLevel={14}
+            followUserLocation
+            followZoomLevel={14}
+          />
+          <UserLocation
+            androidRenderMode={'gps'}
+            showsUserHeadingIndicator={true}
+            renderMode={'native'}
+          />
+        </MapView>
+      )}
+    </>
+  );
 }
-For mapbox or mapbox-gl you'll need to provide RNMapboxMapsDownloadToken as well.
-
-{
-  "expo": {
-    "plugins": [
-      [
-        "@rnmapbox/maps",
-        {
-          "RNMapboxMapsImpl": "mapbox",
-          "RNMapboxMapsDownloadToken": "sk.ey...qg"
-        }
-      ]
-    ]
-  }
-}
-If you want to show the user's current location on the map with the UserLocation component, you can use the expo-location plugin to configure the required NSLocationWhenInUseUsageDescription property. Install the plugin with npx expo install expo-location and add its config plugin to the plugins array of your app.{json,config.js,config.ts}:
-
-{
-  "expo": {
-    "plugins": [
-      [
-        "expo-location",
-        {
-          "locationWhenInUsePermission": "Show current location on map."
-        }
-      ]
-    ]
-  }
-}
-Next, rebuild your app as described in the "Adding custom native code" guide.
-
-Advanced Configuration
-For mapbox or mapbox-gl on iOS it's possible to overwrite the native SDK version with RNMapboxMapsVersion:
-
-{
-  "expo": {
-    "plugins": [
-      [
-        "@rnmapbox/maps",
-        {
-          "RNMapboxMapsImpl": "mapbox",
-          "RNMapboxMapsVersion": "10.XX.XX",
-          "RNMapboxMapsDownloadToken": "sk.ey...qg"
-        }
-      ]
-    ]
-  }
-}
-Manual Setup
-For bare workflow projects, you can follow the manual setup guides:
-
-iOS
-Android
 ```
 
 Do not show any attribution and disable telemetry if possible.

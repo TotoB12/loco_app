@@ -1,4 +1,4 @@
-package com.loco
+package com.antoninbeliard.loco
 
 import android.app.Application
 import android.content.res.Configuration

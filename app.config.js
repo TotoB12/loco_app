@@ -14,6 +14,15 @@ export default ({ config }) => {
       "resizeMode": "contain",
       "backgroundColor": "#212832"
     },
+    "newArchEnabled": false,
+    "experiments": {
+      "turboModules": false,
+      "coreModules": false,
+      "unoptimizedReports": false,
+      "enableAsyncDefaults": false,
+      "concurrentRoot": false,
+      "fabric": false
+    },
     "plugins": [
       [
         "react-native-radar",
@@ -26,6 +35,13 @@ export default ({ config }) => {
           "androidBackgroundPermission": true,
           "androidFineLocationPermission": true,
           "addRadarSDKMotion": false
+        }
+      ],
+      [
+        "@rnmapbox/maps",
+        {
+          "RNMapboxMapsDownloadToken": "sk.eyJ1IjoidG90b2IxMjE3IiwiYSI6ImNtNmltOGd3cDA5c3gydm9vNmk3ZXh2cWEifQ.LejajWlcxf226PnDlCWGBA",
+          "RNMapboxMapsVersion": "11.0.0"
         }
       ],
       [
@@ -44,9 +60,14 @@ export default ({ config }) => {
         ],
         "NSLocationWhenInUseUsageDescription": "Show current location on map",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Background location usage..."
-      }
+      },
+      "config": {
+        "googleMapsApiKey": "AIzaSyCCkJk7m5UqYt9_dHHxjA0zzvWKadSn41U"
+      },
     },
     "android": {
+      "package": "com.antoninbeliard.loco",
+      "icon": "./assets/icon.png",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#212832"
@@ -59,7 +80,12 @@ export default ({ config }) => {
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_BACKGROUND_LOCATION",
         "android.permission.FOREGROUND_SERVICE"
-      ]
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyAgtPIWpSfr1a2dxUdBxXVw7Xah1yqL9YQ"
+        }
+      }
     },
     "extra": {
       "eas": {

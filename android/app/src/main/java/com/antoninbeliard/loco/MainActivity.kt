@@ -1,4 +1,4 @@
-package com.loco
+package com.antoninbeliard.loco
 
 import android.os.Build
 import android.os.Bundle

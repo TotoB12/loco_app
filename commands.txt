@@ -1,7 +1,9 @@
-eas build --profile development --platform android
-eas build:run -p android
+npx expo prebuild --clean
 
 eas build:configure
+
+eas build --profile development --platform android
+eas build:run -p android
 
 eas build --platform android --profile preview
 eas build --platform ios
