@@ -19,6 +19,7 @@
     "expo": "~52.0.24",
     "expo-background-fetch": "~13.0.4",
     "expo-dev-client": "~5.0.9",
+    "expo-intent-launcher": "~12.0.2",
     "expo-location": "~18.0.5",
     "expo-status-bar": "~2.0.0",
     "expo-task-manager": "~12.0.4",
