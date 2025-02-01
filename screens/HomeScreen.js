@@ -1,8 +1,16 @@
 // screens/HomeScreen.js
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Modal,
+  TextInput,
+} from 'react-native';
 import { signOut } from 'firebase/auth';
-import { auth } from '../firebaseConfig';
+import { auth, db } from '../firebaseConfig';
+import { get, ref, update } from 'firebase/database';
 import Radar from 'react-native-radar';
 import Mapbox, { MapView, LocationPuck } from '@rnmapbox/maps';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -11,11 +19,22 @@ import { FontAwesome5 } from '@expo/vector-icons';
 export default function HomeScreen() {
   const [currentLocation, setCurrentLocation] = useState(null);
 
+  // State for showing the settings modal
+  const [showSettings, setShowSettings] = useState(false);
+  // Settings state for first name and last name
+  const [settingsFirstName, setSettingsFirstName] = useState('');
+  const [settingsLastName, setSettingsLastName] = useState('');
+  // Error flags for invalid inputs
+  const [firstNameError, setFirstNameError] = useState(false);
+  const [lastNameError, setLastNameError] = useState(false);
+
   // ------------------------------
   //  Mapbox Token & Telemetry
   // ------------------------------
   useEffect(() => {
-    Mapbox.setAccessToken('pk.eyJ1IjoidG90b2IxMjE3IiwiYSI6ImNsbXo4NHdocjA4dnEya215cjY0aWJ1cGkifQ.OMzA6Q8VnHLHZP-P8ACBRw');
+    Mapbox.setAccessToken(
+      'pk.eyJ1IjoidG90b2IxMjE3IiwiYSI6ImNsbXo4NHdocjA4dnEya215cjY0aWJ1cGkifQ.OMzA6Q8VnHLHZP-P8ACBRw'
+    );
     Mapbox.setTelemetryEnabled(false);
   }, []);
 
@@ -23,7 +42,7 @@ export default function HomeScreen() {
   //  Radar foreground tracking
   // ------------------------------
   useEffect(() => {
-    // track once every 10s while in foreground
+    // Track once every 10 seconds while in foreground
     const intervalId = setInterval(() => {
       Radar.trackOnce({ desiredAccuracy: 'high' })
         .then((result) => {
@@ -34,10 +53,78 @@ export default function HomeScreen() {
         .catch((err) => {
           console.log('Radar trackOnce error =>', err);
         });
-    }, 10_000);
+    }, 10000);
 
     return () => clearInterval(intervalId);
   }, []);
+
+  // ------------------------------
+  //  When settings modal opens:
+  //    - Reset error states
+  //    - Fetch current profile data from the DB
+  // ------------------------------
+  useEffect(() => {
+    if (showSettings) {
+      setFirstNameError(false);
+      setLastNameError(false);
+      const user = auth.currentUser;
+      if (user) {
+        get(ref(db, 'users/' + user.uid))
+          .then((snapshot) => {
+            if (snapshot.exists()) {
+              const data = snapshot.val();
+              setSettingsFirstName(data.firstName || '');
+              setSettingsLastName(data.lastName || '');
+            }
+          })
+          .catch((err) => {
+            console.log('Error fetching settings data:', err);
+          });
+      }
+    }
+  }, [showSettings]);
+
+  // ------------------------------
+  //  Validation function: only letters allowed, no spaces.
+  // ------------------------------
+  const validateName = (name) => {
+    // Only letters, no spaces; must be non-empty and max 20 characters.
+    const regex = /^[A-Za-z]+$/;
+    return name.trim().length > 0 && name.length <= 20 && regex.test(name);
+  };
+
+  // ------------------------------
+  //  Handlers for text input changes (update DB if valid)
+  // ------------------------------
+  const handleFirstNameChange = (text) => {
+    setSettingsFirstName(text);
+    if (validateName(text)) {
+      setFirstNameError(false);
+      const user = auth.currentUser;
+      if (user) {
+        update(ref(db, 'users/' + user.uid), { firstName: text }).catch((err) =>
+          console.log('Error updating first name:', err)
+        );
+      }
+    } else {
+      setFirstNameError(true);
+    }
+  };
+
+  const handleLastNameChange = (text) => {
+    setSettingsLastName(text);
+    if (validateName(text)) {
+      setLastNameError(false);
+      const user = auth.currentUser;
+      if (user) {
+        update(ref(db, 'users/' + user.uid), { lastName: text }).catch((err) =>
+          console.log('Error updating last name:', err)
+        );
+      }
+    } else {
+      setLastNameError(true);
+    }
+  };
 
   // ------------------------------
   //  Sign out logic
@@ -66,7 +153,6 @@ export default function HomeScreen() {
         compassViewMargins={{ x: 15, y: 64 }}
         compassFadeWhenNorth={false}
       >
-
         {/* Shows a blue dot for user location */}
         <LocationPuck
           topImage="topImage"
@@ -85,10 +171,7 @@ export default function HomeScreen() {
         {/* Settings Button */}
         <TouchableOpacity
           style={styles.iconButton}
-          onPress={() => {
-            // Add your own navigation or logic here
-            console.log('Settings pressed');
-          }}
+          onPress={() => setShowSettings(true)}
         >
           <MaterialIcons name="settings" size={24} color="black" />
         </TouchableOpacity>
@@ -109,8 +192,8 @@ export default function HomeScreen() {
       <View style={styles.locationInfo}>
         {currentLocation ? (
           <Text style={styles.locationText}>
-            Lat: {currentLocation.latitude.toFixed(6)}{'\n'}
-            Lng: {currentLocation.longitude.toFixed(6)}
+            Lat: {currentLocation.latitude.toFixed(6)}
+            {'\n'}Lng: {currentLocation.longitude.toFixed(6)}
           </Text>
         ) : (
           <Text style={styles.locationText}>No location yet...</Text>
@@ -121,6 +204,36 @@ export default function HomeScreen() {
       <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
         <Text style={styles.signOutText}>Log Out</Text>
       </TouchableOpacity>
+
+      {/* ------------- Settings Modal ------------- */}
+      <Modal
+        animationType="slide"
+        transparent={false}
+        visible={showSettings}
+        onRequestClose={() => setShowSettings(false)}
+      >
+        <View style={styles.modalContainer}>
+          <Text style={styles.modalTitle}>Settings</Text>
+          <TextInput
+            style={[styles.input, firstNameError && styles.errorInput]}
+            placeholder="First Name"
+            value={settingsFirstName}
+            onChangeText={handleFirstNameChange}
+          />
+          <TextInput
+            style={[styles.input, lastNameError && styles.errorInput]}
+            placeholder="Last Name"
+            value={settingsLastName}
+            onChangeText={handleLastNameChange}
+          />
+          <TouchableOpacity
+            style={styles.closeButton}
+            onPress={() => setShowSettings(false)}
+          >
+            <Text style={styles.closeButtonText}>Close</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -132,7 +245,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  // Container that holds the two top icons
+  // Container for the two top icons
   topRow: {
     position: 'absolute',
     top: 10,
@@ -141,7 +254,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: 15,
-    zIndex: 999, // ensure above map
+    zIndex: 999, // Ensure the icons appear above the map.
   },
   // White circular background for each icon
   iconButton: {
@@ -181,6 +294,39 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   signOutText: {
+    color: '#fff',
+    fontSize: 16,
+  },
+  // ----- Modal styles -----
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#fff', // White background as requested.
+    padding: 20,
+    justifyContent: 'center',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 5,
+    padding: 10,
+    marginBottom: 15,
+  },
+  errorInput: {
+    borderColor: 'red',
+  },
+  closeButton: {
+    backgroundColor: '#00ADB5',
+    padding: 10,
+    borderRadius: 5,
+    alignItems: 'center',
+  },
+  closeButtonText: {
     color: '#fff',
     fontSize: 16,
   },
