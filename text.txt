@@ -588,7 +588,7 @@ const styles = StyleSheet.create({
 
 screens/SignupScreen.js
 ```javascript
-// SignupScreen.js
+// screens/SignupScreen.js
 import React, { useState } from 'react';
 import {
     View,
@@ -602,7 +602,8 @@ import {
     Platform,
 } from 'react-native';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { ref, set } from 'firebase/database';
+
 import { auth, db } from '../firebaseConfig';
 
 export default function SignupScreen({ navigation }) {
@@ -617,10 +618,15 @@ export default function SignupScreen({ navigation }) {
                 Alert.alert('Error', 'Please fill in all fields');
                 return;
             }
-            const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+            const userCredential = await createUserWithEmailAndPassword(
+                auth,
+                email.trim(),
+                password
+            );
             const user = userCredential.user;
-            await setDoc(doc(db, 'users', user.uid), {
-                createdAt: serverTimestamp(),
+            // Save user data to the Realtime Database
+            await set(ref(db, 'users/' + user.uid), {
+                createdAt: { ".sv": "timestamp" },
                 firstName: firstName.trim(),
                 lastName: lastName.trim(),
                 email: email.trim(),
@@ -804,8 +810,7 @@ firebaseConfig.js
 ```javascript
 // firebaseConfig.js
 import { initializeApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
-
+import { getDatabase } from 'firebase/database';
 import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -827,7 +832,8 @@ export const auth = initializeAuth(app, {
     persistence: getReactNativePersistence(AsyncStorage),
 });
 
-export const db = getFirestore(app);
+// Initialize and export the Realtime Database instead of Firestore:
+export const db = getDatabase(app);
 ```
 
 package.json
@@ -973,4 +979,4 @@ export default ({ config }) => {
 };
 ```
 
-This setup appears to work, but I am considering switching my use of a Firestore Database with a Realtime Database. On a Realtime, I will have unlimited read and writes, which could be usefull since I am using the free tier. But at the same time, I am worried since that uses Websocket: could that make the background updates harder? If possible, I want you to fully develop and implement this.
+This all works well, but I want to add a new feature: the settings. When the user clicks the settings button on the home page, I want a settings panel to popup: I do not want to have a seperate screen for this, but for it to be incorporated in the Home screen. For now, this settings panel should only show two text entries for the user's first and last name. Make sure that these fields show the latest values from the Database when the settings are opened. When any of these values are changed inside the text fields, they should immedietly send the update to the database (except if the it's invalid, then have the input area have a red border: special characters, empty characters, max lenght). I want you to fully develop and implement this.

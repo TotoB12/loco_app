@@ -3,8 +3,9 @@ import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { onAuthStateChanged } from 'firebase/auth';
+import { ref, update } from 'firebase/database';
+
 import { auth, db } from './firebaseConfig';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import Radar from 'react-native-radar';
 
 import * as Location from 'expo-location';
@@ -12,7 +13,7 @@ import * as IntentLauncher from 'expo-intent-launcher';
 import { Linking, Platform } from 'react-native';
 
 // Screens
-import PermissionScreen from './screens/PermissionScreen'; // We'll define a new one below
+import PermissionScreen from './screens/PermissionScreen';
 import LoadingScreen from './screens/LoadingScreen';
 import LoginScreen from './screens/LoginScreen';
 import SignupScreen from './screens/SignupScreen';
@@ -98,20 +99,18 @@ export default function App() {
     Radar.on('location', async (result) => {
       console.log('Radar location event =>', result);
 
-      // If user is logged in, push location to Firestore
+      // If user is logged in, push location to Realtime Database
       const currentUser = auth.currentUser;
       if (currentUser && result.location) {
-        await setDoc(
-          doc(db, 'users', currentUser.uid),
-          {
-            location: {
-              latitude: result.location.latitude,
-              longitude: result.location.longitude,
-            },
-            locationTimestamp: serverTimestamp(),
+        const userRef = ref(db, 'users/' + currentUser.uid);
+        await update(userRef, {
+          location: {
+            latitude: result.location.latitude,
+            longitude: result.location.longitude,
           },
-          { merge: true }
-        );
+          // Using the Realtime Database server timestamp sentinel:
+          locationTimestamp: { ".sv": "timestamp" },
+        });
       }
     });
 

@@ -1,4 +1,4 @@
-// SignupScreen.js
+// screens/SignupScreen.js
 import React, { useState } from 'react';
 import {
     View,
@@ -12,7 +12,8 @@ import {
     Platform,
 } from 'react-native';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { ref, set } from 'firebase/database';
+
 import { auth, db } from '../firebaseConfig';
 
 export default function SignupScreen({ navigation }) {
@@ -27,10 +28,15 @@ export default function SignupScreen({ navigation }) {
                 Alert.alert('Error', 'Please fill in all fields');
                 return;
             }
-            const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+            const userCredential = await createUserWithEmailAndPassword(
+                auth,
+                email.trim(),
+                password
+            );
             const user = userCredential.user;
-            await setDoc(doc(db, 'users', user.uid), {
-                createdAt: serverTimestamp(),
+            // Save user data to the Realtime Database
+            await set(ref(db, 'users/' + user.uid), {
+                createdAt: { ".sv": "timestamp" },
                 firstName: firstName.trim(),
                 lastName: lastName.trim(),
                 email: email.trim(),
