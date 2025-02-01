@@ -15,18 +15,25 @@ import Radar from 'react-native-radar';
 import Mapbox, { MapView, LocationPuck } from '@rnmapbox/maps';
 import { MaterialIcons } from '@expo/vector-icons';
 import { FontAwesome5 } from '@expo/vector-icons';
+import { SearchBar, ListItem, Icon } from '@rneui/themed';
 
 export default function HomeScreen() {
   const [currentLocation, setCurrentLocation] = useState(null);
 
-  // State for showing the settings modal
+  // Settings modal state
   const [showSettings, setShowSettings] = useState(false);
-  // Settings state for first name and last name
   const [settingsFirstName, setSettingsFirstName] = useState('');
   const [settingsLastName, setSettingsLastName] = useState('');
-  // Error flags for invalid inputs
   const [firstNameError, setFirstNameError] = useState(false);
   const [lastNameError, setLastNameError] = useState(false);
+
+  // Social (Friends) modal state
+  const [showSocial, setShowSocial] = useState(false);
+  // Accordion expansion state
+  const [expanded1, setExpanded1] = useState(false);
+  const [expanded2, setExpanded2] = useState(false);
+  // Search text state (currently non-functional)
+  const [search, setSearch] = useState('');
 
   // ------------------------------
   //  Mapbox Token & Telemetry
@@ -59,7 +66,7 @@ export default function HomeScreen() {
   }, []);
 
   // ------------------------------
-  //  When settings modal opens:
+  //  When Settings modal opens:
   //    - Reset error states
   //    - Fetch current profile data from the DB
   // ------------------------------
@@ -179,10 +186,7 @@ export default function HomeScreen() {
         {/* Friends Button */}
         <TouchableOpacity
           style={styles.iconButton}
-          onPress={() => {
-            // Add your own navigation or logic here
-            console.log('Friends pressed');
-          }}
+          onPress={() => setShowSocial(true)}
         >
           <FontAwesome5 name="user-friends" size={20} color="black" />
         </TouchableOpacity>
@@ -229,6 +233,73 @@ export default function HomeScreen() {
           <TouchableOpacity
             style={styles.closeButton}
             onPress={() => setShowSettings(false)}
+          >
+            <Text style={styles.closeButtonText}>Close</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
+
+      {/* ------------- Social Modal (Friends) ------------- */}
+      <Modal
+        animationType="slide"
+        transparent={false}
+        visible={showSocial}
+        onRequestClose={() => setShowSocial(false)}
+      >
+        <View style={styles.modalContainer}>
+          <Text style={styles.modalTitle}>People</Text>
+          <SearchBar
+            placeholder="Search People..."
+            onChangeText={setSearch}
+            value={search}
+            platform="default"
+            containerStyle={styles.searchContainer}
+            inputContainerStyle={styles.searchInputContainer}
+            inputStyle={styles.searchInput}
+          />
+
+          {/* First Accordion */}
+          <ListItem.Accordion
+            content={
+              <>
+                <ListItem.Content>
+                  <ListItem.Title>Sharing With</ListItem.Title>
+                </ListItem.Content>
+              </>
+            }
+            animation="default"
+            isExpanded={expanded1}
+            onPress={() => setExpanded1(!expanded1)}
+          >
+            <ListItem bottomDivider>
+              <ListItem.Content>
+                <ListItem.Title>User 1</ListItem.Title>
+              </ListItem.Content>
+            </ListItem>
+          </ListItem.Accordion>
+
+          {/* Second Accordion */}
+          <ListItem.Accordion
+            content={
+              <>
+                <ListItem.Content>
+                  <ListItem.Title>Receiving Locations</ListItem.Title>
+                </ListItem.Content>
+              </>
+            }
+            isExpanded={expanded2}
+            onPress={() => setExpanded2(!expanded2)}
+          >
+            <ListItem bottomDivider>
+              <ListItem.Content>
+                <ListItem.Title>User 2</ListItem.Title>
+              </ListItem.Content>
+            </ListItem>
+          </ListItem.Accordion>
+
+          <TouchableOpacity
+            style={styles.closeButton}
+            onPress={() => setShowSocial(false)}
           >
             <Text style={styles.closeButtonText}>Close</Text>
           </TouchableOpacity>
@@ -297,7 +368,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
   },
-  // ----- Modal styles -----
+  // ----- Modal styles (used for both Settings and Social modals) -----
   modalContainer: {
     flex: 1,
     backgroundColor: '#fff', // White background as requested.
@@ -325,9 +396,26 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 5,
     alignItems: 'center',
+    marginTop: 20,
   },
   closeButtonText: {
     color: '#fff',
     fontSize: 16,
   },
+  // Styles for the SearchBar components in the social modal
+  searchContainer: {
+    backgroundColor: 'transparent',
+    borderTopWidth: 0,
+    borderBottomWidth: 0,
+    paddingHorizontal: 0,
+    marginBottom: 20,
+  },
+  searchInputContainer: {
+    backgroundColor: '#eee',
+    borderRadius: 5,
+  },
+  searchInput: {
+    color: '#000',
+  },
 });
+

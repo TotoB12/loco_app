@@ -291,18 +291,25 @@ import Radar from 'react-native-radar';
 import Mapbox, { MapView, LocationPuck } from '@rnmapbox/maps';
 import { MaterialIcons } from '@expo/vector-icons';
 import { FontAwesome5 } from '@expo/vector-icons';
+import { SearchBar, ListItem, Icon } from '@rneui/themed';
 
 export default function HomeScreen() {
   const [currentLocation, setCurrentLocation] = useState(null);
 
-  // State for showing the settings modal
+  // Settings modal state
   const [showSettings, setShowSettings] = useState(false);
-  // Settings state for first name and last name
   const [settingsFirstName, setSettingsFirstName] = useState('');
   const [settingsLastName, setSettingsLastName] = useState('');
-  // Error flags for invalid inputs
   const [firstNameError, setFirstNameError] = useState(false);
   const [lastNameError, setLastNameError] = useState(false);
+
+  // Social (Friends) modal state
+  const [showSocial, setShowSocial] = useState(false);
+  // Accordion expansion state
+  const [expanded1, setExpanded1] = useState(false);
+  const [expanded2, setExpanded2] = useState(false);
+  // Search text state (currently non-functional)
+  const [search, setSearch] = useState('');
 
   // ------------------------------
   //  Mapbox Token & Telemetry
@@ -335,7 +342,7 @@ export default function HomeScreen() {
   }, []);
 
   // ------------------------------
-  //  When settings modal opens:
+  //  When Settings modal opens:
   //    - Reset error states
   //    - Fetch current profile data from the DB
   // ------------------------------
@@ -455,10 +462,7 @@ export default function HomeScreen() {
         {/* Friends Button */}
         <TouchableOpacity
           style={styles.iconButton}
-          onPress={() => {
-            // Add your own navigation or logic here
-            console.log('Friends pressed');
-          }}
+          onPress={() => setShowSocial(true)}
         >
           <FontAwesome5 name="user-friends" size={20} color="black" />
         </TouchableOpacity>
@@ -505,6 +509,73 @@ export default function HomeScreen() {
           <TouchableOpacity
             style={styles.closeButton}
             onPress={() => setShowSettings(false)}
+          >
+            <Text style={styles.closeButtonText}>Close</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
+
+      {/* ------------- Social Modal (Friends) ------------- */}
+      <Modal
+        animationType="slide"
+        transparent={false}
+        visible={showSocial}
+        onRequestClose={() => setShowSocial(false)}
+      >
+        <View style={styles.modalContainer}>
+          <Text style={styles.modalTitle}>People</Text>
+          <SearchBar
+            placeholder="Search People..."
+            onChangeText={setSearch}
+            value={search}
+            platform="default"
+            containerStyle={styles.searchContainer}
+            inputContainerStyle={styles.searchInputContainer}
+            inputStyle={styles.searchInput}
+          />
+
+          {/* First Accordion */}
+          <ListItem.Accordion
+            content={
+              <>
+                <ListItem.Content>
+                  <ListItem.Title>Sharing With</ListItem.Title>
+                </ListItem.Content>
+              </>
+            }
+            animation="default"
+            isExpanded={expanded1}
+            onPress={() => setExpanded1(!expanded1)}
+          >
+            <ListItem bottomDivider>
+              <ListItem.Content>
+                <ListItem.Title>User 1</ListItem.Title>
+              </ListItem.Content>
+            </ListItem>
+          </ListItem.Accordion>
+
+          {/* Second Accordion */}
+          <ListItem.Accordion
+            content={
+              <>
+                <ListItem.Content>
+                  <ListItem.Title>Receiving Locations</ListItem.Title>
+                </ListItem.Content>
+              </>
+            }
+            isExpanded={expanded2}
+            onPress={() => setExpanded2(!expanded2)}
+          >
+            <ListItem bottomDivider>
+              <ListItem.Content>
+                <ListItem.Title>User 2</ListItem.Title>
+              </ListItem.Content>
+            </ListItem>
+          </ListItem.Accordion>
+
+          <TouchableOpacity
+            style={styles.closeButton}
+            onPress={() => setShowSocial(false)}
           >
             <Text style={styles.closeButtonText}>Close</Text>
           </TouchableOpacity>
@@ -573,7 +644,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
   },
-  // ----- Modal styles -----
+  // ----- Modal styles (used for both Settings and Social modals) -----
   modalContainer: {
     flex: 1,
     backgroundColor: '#fff', // White background as requested.
@@ -601,10 +672,26 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 5,
     alignItems: 'center',
+    marginTop: 20,
   },
   closeButtonText: {
     color: '#fff',
     fontSize: 16,
+  },
+  // Styles for the SearchBar components in the social modal
+  searchContainer: {
+    backgroundColor: 'transparent',
+    borderTopWidth: 0,
+    borderBottomWidth: 0,
+    paddingHorizontal: 0,
+    marginBottom: 20,
+  },
+  searchInputContainer: {
+    backgroundColor: '#eee',
+    borderRadius: 5,
+  },
+  searchInput: {
+    color: '#000',
   },
 });
 ```
@@ -1125,143 +1212,4 @@ export default ({ config }) => {
 };
 ```
 
-This all works well, but I want to add a new feature: the social page. When the Friends button is pressed, I want the social modal (similarly styled to the settings modal) to appear. It should look like this:
-
-- title at the top saying "People"
-- a search bar (that does nothing for now)
-- a menu option looking button that says "Sharing with", that will open another seperate area showing just the title "Sharing with"
-
-I want you to fully develop and implement this. Do not add any of the actual functionality of these new elements. Use `React Native Elements`. I have already ran `npm install @rneui/themed @rneui/base`. Here is some documentation:
-
-```
-SearchBar
-Usage
-Import
-import { SearchBar } from '@rneui/themed';
-
-Theme Key 
-SearchBar
-
-Default SearchBar
-
-Platform specific SearchBar
-iOS
-
-
-Android
-
-
-Interaction methods
-method	description
-focus	call focus on the textinput (example)
-blur	call blur on the textinput (example)
-clear	call clear on the textinput (example)
-cancel	(Android and iOS SearchBars only) call cancel on the SearchBar (left arrow on Android, Cancel button on iOS). This will basically blur the input and hide the keyboard (example)
-Calling methods on SearchBar
-Store a reference to the SearchBar in your component by using the ref prop provided by React (see docs):
-
-<SearchBar
-  ref={search => this.search = search}
-  ...
-/>
-
-You can then access SearchBar methods like so:
-
-this.search.focus();
-this.search.blur();
-this.search.clear();
-this.search.cancel(); // Only available if `platform` props is "ios" | "android"
-
-
-Props
-note
-Includes all Input props.
-
-Name	Type	Default	Description
-cancelButtonProps	Text Style		
-cancelButtonTitle	string		
-cancelIcon	IconNode		
-clearIcon	IconNode		Clear Icon
-containerStyle	View Style		Style for container
-inputContainerStyle	View Style		Style for input container
-inputStyle	Text Style		Input Style
-leftIconContainerStyle	View Style		Left Icon Container Style
-lightTheme	boolean		
-loadingProps	ActivityIndicatorProps		ActivityIndicatorProps
-onCancel	(() => any) | (() => any)		Callback Function on cancel icon press
-onClear	Function		
-onKeyboardHide	Function		Callback Function on keyboard hides
-platform	default | android | ios	default	
-rightIconContainerStyle	View Style		Right Icon Container Style
-round	boolean		
-searchIcon	IconNode		Icon for search
-showCancel	boolean		Show cancel
-showLoading	boolean		Show loading
-Playground
-Type query here...
-platform [?]
-
-default
-
-ios
-
-android
-clearIcon [?]
-
-searchIcon [?]
-
-cancelIcon [?]
-
-containerStyle [?]
-{}
-{}
-inputContainerStyle [?]
-{}
-{}
-inputStyle [?]
-{}
-{}
-leftIconContainerStyle [?]
-{}
-{}
-rightIconContainerStyle [?]
-{}
-{}
-
-lightTheme [?]
-loadingProps [?]
-{}
-{}
-onChangeText [?]
-(newVal) => setValue(newVal)
-(newVal) => setValue(newVal)
-onClearText [?]
-() => console.log(onClearText())
-() => console.log(onClearText())
-placeholder [?]
-Type query here...
-Type query here...
-placeholderTextColor [?]
-#888
-#888
-
-round [?]
-
-showCancel [?]
-
-showLoading [?]
-underlineColorAndroid [?]
-
-cancelButtonTitle [?]
-Cancel
-Cancel
-cancelButtonProps [?]
-{}
-{}
-onCancel [?]
-() => console.log(onCancel())
-() => console.log(onCancel())
-value [?]
-
-Format codeCopy codeCopy URLReset
-```
+This all works well, but I want to fully redesign the settings and people modal. I want both of them to have the page title in large in the top left, along with the close button (an x icon) in the top right. Under, the rest of the page should be shown as normal. I want this to look and act like a normal page, for any device: not have everything aligned in the center. I want you to fully develop and implement this. 
