@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   Modal,
   TextInput,
+  SafeAreaView,
+  ScrollView,
 } from 'react-native';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../firebaseConfig';
@@ -15,7 +17,7 @@ import Radar from 'react-native-radar';
 import Mapbox, { MapView, LocationPuck } from '@rnmapbox/maps';
 import { MaterialIcons } from '@expo/vector-icons';
 import { FontAwesome5 } from '@expo/vector-icons';
-import { SearchBar, ListItem, Icon } from '@rneui/themed';
+import { SearchBar, ListItem, Divider } from '@rneui/themed';
 
 export default function HomeScreen() {
   const [currentLocation, setCurrentLocation] = useState(null);
@@ -27,11 +29,11 @@ export default function HomeScreen() {
   const [firstNameError, setFirstNameError] = useState(false);
   const [lastNameError, setLastNameError] = useState(false);
 
-  // Social (Friends) modal state
+  // Social (People) modal state
   const [showSocial, setShowSocial] = useState(false);
   // Accordion expansion state
   const [expanded1, setExpanded1] = useState(false);
-  const [expanded2, setExpanded2] = useState(false);
+  const [expanded2, setExpanded2] = useState(true);
   // Search text state (currently non-functional)
   const [search, setSearch] = useState('');
 
@@ -209,101 +211,110 @@ export default function HomeScreen() {
         <Text style={styles.signOutText}>Log Out</Text>
       </TouchableOpacity>
 
-      {/* ------------- Settings Modal ------------- */}
+      {/* ------------- Redesigned Settings Modal ------------- */}
       <Modal
         animationType="slide"
         transparent={false}
         visible={showSettings}
         onRequestClose={() => setShowSettings(false)}
       >
-        <View style={styles.modalContainer}>
-          <Text style={styles.modalTitle}>Settings</Text>
-          <TextInput
-            style={[styles.input, firstNameError && styles.errorInput]}
-            placeholder="First Name"
-            value={settingsFirstName}
-            onChangeText={handleFirstNameChange}
-          />
-          <TextInput
-            style={[styles.input, lastNameError && styles.errorInput]}
-            placeholder="Last Name"
-            value={settingsLastName}
-            onChangeText={handleLastNameChange}
-          />
-          <TouchableOpacity
-            style={styles.closeButton}
-            onPress={() => setShowSettings(false)}
+        <SafeAreaView style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Settings</Text>
+            <TouchableOpacity onPress={() => setShowSettings(false)}>
+              <MaterialIcons name="close" size={28} color="#000" />
+            </TouchableOpacity>
+          </View>
+          <ScrollView
+            style={styles.modalContent}
+            contentContainerStyle={styles.modalScroll}
           >
-            <Text style={styles.closeButtonText}>Close</Text>
-          </TouchableOpacity>
-        </View>
+            <TextInput
+              style={[styles.input, firstNameError && styles.errorInput]}
+              placeholder="First Name"
+              value={settingsFirstName}
+              onChangeText={handleFirstNameChange}
+            />
+            <TextInput
+              style={[styles.input, lastNameError && styles.errorInput]}
+              placeholder="Last Name"
+              value={settingsLastName}
+              onChangeText={handleLastNameChange}
+            />
+          </ScrollView>
+        </SafeAreaView>
       </Modal>
 
-      {/* ------------- Social Modal (Friends) ------------- */}
+      {/* ------------- Redesigned People (Social) Modal ------------- */}
       <Modal
         animationType="slide"
         transparent={false}
         visible={showSocial}
         onRequestClose={() => setShowSocial(false)}
       >
-        <View style={styles.modalContainer}>
-          <Text style={styles.modalTitle}>People</Text>
-          <SearchBar
-            placeholder="Search People..."
-            onChangeText={setSearch}
-            value={search}
-            platform="default"
-            containerStyle={styles.searchContainer}
-            inputContainerStyle={styles.searchInputContainer}
-            inputStyle={styles.searchInput}
-          />
-
-          {/* First Accordion */}
-          <ListItem.Accordion
-            content={
-              <>
+        <SafeAreaView style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>People</Text>
+            <TouchableOpacity onPress={() => setShowSocial(false)}>
+              <MaterialIcons name="close" size={28} color="#000" />
+            </TouchableOpacity>
+          </View>
+          <ScrollView
+            style={styles.modalContent}
+            contentContainerStyle={styles.modalScroll}
+          >
+            <SearchBar
+              placeholder="Search..."
+              onChangeText={setSearch}
+              value={search}
+              platform="default"
+              containerStyle={styles.searchContainer}
+              inputContainerStyle={styles.searchInputContainer}
+              inputStyle={styles.searchInput}
+            />
+            <ListItem.Accordion
+              content={
                 <ListItem.Content>
                   <ListItem.Title>Sharing With</ListItem.Title>
                 </ListItem.Content>
-              </>
-            }
-            animation="default"
-            isExpanded={expanded1}
-            onPress={() => setExpanded1(!expanded1)}
-          >
-            <ListItem bottomDivider>
-              <ListItem.Content>
-                <ListItem.Title>User 1</ListItem.Title>
-              </ListItem.Content>
-            </ListItem>
-          </ListItem.Accordion>
+              }
+              animation="default"
+              isExpanded={expanded1}
+              onPress={() => setExpanded1(!expanded1)}
+            >
+              <ListItem bottomDivider>
+                <ListItem.Content>
+                  <ListItem.Title>User 1</ListItem.Title>
+                </ListItem.Content>
+              </ListItem>
+            </ListItem.Accordion>
 
-          {/* Second Accordion */}
-          <ListItem.Accordion
-            content={
-              <>
+            {/* divider */}
+            <Divider
+              style={{ width: "100%" }}
+              insetType="middle"
+              subHeaderStyle={{}}
+              width={1}
+              orientation="horizontal"
+            />
+
+            <ListItem.Accordion
+              content={
                 <ListItem.Content>
                   <ListItem.Title>Receiving Locations</ListItem.Title>
                 </ListItem.Content>
-              </>
-            }
-            isExpanded={expanded2}
-            onPress={() => setExpanded2(!expanded2)}
-          >
-            <ListItem bottomDivider>
-              <ListItem.Content>
-                <ListItem.Title>User 2</ListItem.Title>
-              </ListItem.Content>
-            </ListItem>
-          </ListItem.Accordion>
-
-          <TouchableOpacity
-            style={styles.closeButton}
-            onPress={() => setShowSocial(false)}
-          >
-            <Text style={styles.closeButtonText}>Close</Text>
-          </TouchableOpacity>
-        </View>
+              }
+              isExpanded={expanded2}
+              onPress={() => setExpanded2(!expanded2)}
+            >
+              <ListItem bottomDivider>
+                <ListItem.Content>
+                  <ListItem.Title>User 2</ListItem.Title>
+                </ListItem.Content>
+              </ListItem>
+            </ListItem.Accordion>
+          </ScrollView>
+        </SafeAreaView>
       </Modal>
     </View>
   );
@@ -368,19 +379,35 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
   },
-  // ----- Modal styles (used for both Settings and Social modals) -----
+  // ----- Redesigned Modal Styles -----
   modalContainer: {
     flex: 1,
-    backgroundColor: '#fff', // White background as requested.
-    padding: 20,
-    justifyContent: 'center',
+    backgroundColor: '#fff',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ccc',
   },
   modalTitle: {
-    fontSize: 20,
+    fontSize: 28,
     fontWeight: 'bold',
-    marginBottom: 20,
-    textAlign: 'center',
+    color: '#000',
   },
+  modalContent: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+  },
+  modalScroll: {
+    flexGrow: 1,
+  },
+  // Reuse your existing input styles:
   input: {
     borderWidth: 1,
     borderColor: '#ccc',
@@ -390,17 +417,6 @@ const styles = StyleSheet.create({
   },
   errorInput: {
     borderColor: 'red',
-  },
-  closeButton: {
-    backgroundColor: '#00ADB5',
-    padding: 10,
-    borderRadius: 5,
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  closeButtonText: {
-    color: '#fff',
-    fontSize: 16,
   },
   // Styles for the SearchBar components in the social modal
   searchContainer: {
@@ -418,4 +434,3 @@ const styles = StyleSheet.create({
     color: '#000',
   },
 });
-
