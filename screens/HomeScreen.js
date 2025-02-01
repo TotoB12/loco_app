@@ -17,7 +17,7 @@ import Radar from 'react-native-radar';
 import Mapbox, { MapView, LocationPuck } from '@rnmapbox/maps';
 import { MaterialIcons } from '@expo/vector-icons';
 import { FontAwesome5 } from '@expo/vector-icons';
-import { SearchBar, ListItem, Divider } from '@rneui/themed';
+import { SearchBar, ListItem, Divider, Avatar } from '@rneui/themed';
 
 export default function HomeScreen() {
   const [currentLocation, setCurrentLocation] = useState(null);
@@ -28,6 +28,7 @@ export default function HomeScreen() {
   const [settingsLastName, setSettingsLastName] = useState('');
   const [firstNameError, setFirstNameError] = useState(false);
   const [lastNameError, setLastNameError] = useState(false);
+  const [avatarUri, setAvatarUri] = useState(null);
 
   // Social (People) modal state
   const [showSocial, setShowSocial] = useState(false);
@@ -84,6 +85,11 @@ export default function HomeScreen() {
               const data = snapshot.val();
               setSettingsFirstName(data.firstName || '');
               setSettingsLastName(data.lastName || '');
+              if (data.avatar && data.avatar.link) {
+                setAvatarUri(data.avatar.link);
+              } else {
+                setAvatarUri(null);
+              }
             }
           })
           .catch((err) => {
@@ -229,12 +235,46 @@ export default function HomeScreen() {
             style={styles.modalContent}
             contentContainerStyle={styles.modalScroll}
           >
+            {/* Profile Picture Section */}
+            <View style={styles.avatarContainer}>
+              <Avatar
+                size={100}
+                rounded
+                source={avatarUri ? { uri: avatarUri } : null}
+                icon={!avatarUri ? { name: 'person', type: 'material' } : undefined}
+                containerStyle={styles.avatar}
+              />
+              <View style={styles.avatarButtonsContainer}>
+                <TouchableOpacity
+                  style={styles.avatarButton}
+                  onPress={() => {
+                    // TODO: Implement image selection
+                  }}
+                >
+                  <Text style={styles.avatarButtonText}>Select Image</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.avatarButton}
+                  onPress={() => {
+                    // TODO: Implement remove picture functionality
+                  }}
+                >
+                  <Text style={styles.avatarButtonText}>Remove Picture</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* First Name Field with Label */}
+            <Text style={styles.label}>First Name</Text>
             <TextInput
               style={[styles.input, firstNameError && styles.errorInput]}
               placeholder="First Name"
               value={settingsFirstName}
               onChangeText={handleFirstNameChange}
             />
+
+            {/* Last Name Field with Label */}
+            <Text style={styles.label}>Last Name</Text>
             <TextInput
               style={[styles.input, lastNameError && styles.errorInput]}
               placeholder="Last Name"
@@ -291,9 +331,8 @@ export default function HomeScreen() {
 
             {/* divider */}
             <Divider
-              style={{ width: "100%" }}
+              style={{ width: '100%' }}
               insetType="middle"
-              subHeaderStyle={{}}
               width={1}
               orientation="horizontal"
             />
@@ -418,6 +457,13 @@ const styles = StyleSheet.create({
   errorInput: {
     borderColor: 'red',
   },
+  // Label styles for input fields
+  label: {
+    fontSize: 16,
+    color: '#000',
+    marginBottom: 5,
+    marginTop: 15,
+  },
   // Styles for the SearchBar components in the social modal
   searchContainer: {
     backgroundColor: 'transparent',
@@ -433,4 +479,27 @@ const styles = StyleSheet.create({
   searchInput: {
     color: '#000',
   },
+  // ----- New Styles for Avatar/Profile Picture Section -----
+  avatarContainer: {
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  avatar: {
+    backgroundColor: '#ccc',
+  },
+  avatarButtonsContainer: {
+    flexDirection: 'row',
+    marginTop: 10,
+  },
+  avatarButton: {
+    backgroundColor: '#00ADB5',
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 5,
+    marginHorizontal: 5,
+  },
+  avatarButtonText: {
+    color: '#fff',
+  },
 });
+

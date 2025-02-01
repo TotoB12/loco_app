@@ -293,7 +293,7 @@ import Radar from 'react-native-radar';
 import Mapbox, { MapView, LocationPuck } from '@rnmapbox/maps';
 import { MaterialIcons } from '@expo/vector-icons';
 import { FontAwesome5 } from '@expo/vector-icons';
-import { SearchBar, ListItem, Divider } from '@rneui/themed';
+import { SearchBar, ListItem, Divider, Avatar } from '@rneui/themed';
 
 export default function HomeScreen() {
   const [currentLocation, setCurrentLocation] = useState(null);
@@ -304,6 +304,7 @@ export default function HomeScreen() {
   const [settingsLastName, setSettingsLastName] = useState('');
   const [firstNameError, setFirstNameError] = useState(false);
   const [lastNameError, setLastNameError] = useState(false);
+  const [avatarUri, setAvatarUri] = useState(null);
 
   // Social (People) modal state
   const [showSocial, setShowSocial] = useState(false);
@@ -360,6 +361,11 @@ export default function HomeScreen() {
               const data = snapshot.val();
               setSettingsFirstName(data.firstName || '');
               setSettingsLastName(data.lastName || '');
+              if (data.avatar && data.avatar.link) {
+                setAvatarUri(data.avatar.link);
+              } else {
+                setAvatarUri(null);
+              }
             }
           })
           .catch((err) => {
@@ -505,12 +511,46 @@ export default function HomeScreen() {
             style={styles.modalContent}
             contentContainerStyle={styles.modalScroll}
           >
+            {/* Profile Picture Section */}
+            <View style={styles.avatarContainer}>
+              <Avatar
+                size={100}
+                rounded
+                source={avatarUri ? { uri: avatarUri } : null}
+                icon={!avatarUri ? { name: 'person', type: 'material' } : undefined}
+                containerStyle={styles.avatar}
+              />
+              <View style={styles.avatarButtonsContainer}>
+                <TouchableOpacity
+                  style={styles.avatarButton}
+                  onPress={() => {
+                    // TODO: Implement image selection
+                  }}
+                >
+                  <Text style={styles.avatarButtonText}>Select Image</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.avatarButton}
+                  onPress={() => {
+                    // TODO: Implement remove picture functionality
+                  }}
+                >
+                  <Text style={styles.avatarButtonText}>Remove Picture</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* First Name Field with Label */}
+            <Text style={styles.label}>First Name</Text>
             <TextInput
               style={[styles.input, firstNameError && styles.errorInput]}
               placeholder="First Name"
               value={settingsFirstName}
               onChangeText={handleFirstNameChange}
             />
+
+            {/* Last Name Field with Label */}
+            <Text style={styles.label}>Last Name</Text>
             <TextInput
               style={[styles.input, lastNameError && styles.errorInput]}
               placeholder="Last Name"
@@ -567,9 +607,8 @@ export default function HomeScreen() {
 
             {/* divider */}
             <Divider
-              style={{ width: "100%" }}
+              style={{ width: '100%' }}
               insetType="middle"
-              subHeaderStyle={{}}
               width={1}
               orientation="horizontal"
             />
@@ -694,6 +733,13 @@ const styles = StyleSheet.create({
   errorInput: {
     borderColor: 'red',
   },
+  // Label styles for input fields
+  label: {
+    fontSize: 16,
+    color: '#000',
+    marginBottom: 5,
+    marginTop: 15,
+  },
   // Styles for the SearchBar components in the social modal
   searchContainer: {
     backgroundColor: 'transparent',
@@ -708,6 +754,28 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     color: '#000',
+  },
+  // ----- New Styles for Avatar/Profile Picture Section -----
+  avatarContainer: {
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  avatar: {
+    backgroundColor: '#ccc',
+  },
+  avatarButtonsContainer: {
+    flexDirection: 'row',
+    marginTop: 10,
+  },
+  avatarButton: {
+    backgroundColor: '#00ADB5',
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 5,
+    marginHorizontal: 5,
+  },
+  avatarButtonText: {
+    color: '#fff',
   },
 });
 ```
@@ -1228,175 +1296,1106 @@ export default ({ config }) => {
 };
 ```
 
-This all works well, but I want to implement a new feature. Firstly, I want the names input areas to have little titles above them with "First Name" and "Last Name". Secondly, I want to allow user's to upload their own profile picture:
+This all works well, but I want to implement the full profile picture feature. When "Select Image" is clicked, I want to use `expo-image-picker` to have the user select an image from their device (ensure that all needed permissions are given, if not, show an alert saying to allow photo usage in settings). Once the image is selected, I want the app to use the Imgur API to upload it online. Upload completed, the entire Imgur API response data should be saved under the user's `avatar` in the database. This ensures that all data about the image, that could be needded for later, is saved. Here is an example of that data:
 
-- above the name inputs in the settings modal, I want users to see their current profile picture, along with two buttons under saying "Select Image" and "Remove Picture"
-- when the settings modal is opened, it should check if the user has an "avatar" element under their user in the database; if there is, display that image as the profile picture using the "avatar.link" link item; if there isnt, display the default avatar (an avatar element using a person icon)
-- do not have the two buttons do anything for now
+```
+{
+  "status": 200,
+  "success": true,
+  "data": {
+    "id": "JRBePDz",
+    "deletehash": "EvHVZkhJhdNClgY",
+    "account_id": null,
+    "account_url": null,
+    "ad_type": null,
+    "ad_url": null,
+    "title": "Simple upload",
+    "description": "This is a simple image upload in Imgur",
+    "name": "",
+    "type": "image/jpeg",
+    "width": 600,
+    "height": 750,
+    "size": 54757,
+    "views": 0,
+    "section": null,
+    "vote": null,
+    "bandwidth": 0,
+    "animated": false,
+    "favorite": false,
+    "in_gallery": false,
+    "in_most_viral": false,
+    "has_sound": false,
+    "is_ad": false,
+    "nsfw": null,
+    "link": "https://i.imgur.com/JRBePDz.jpeg",
+    "tags": [],
+    "datetime": 1708424380,
+    "mp4": "",
+    "hls": ""
+  }
+}
+```
 
+The "Remove Picture" button should look into the database, and locate the old image's delete hash: it should call the Imgur API to have the image be deleted, and then delete the `avatar` element of the user in the database.
+Back to the "Select Image: button: one a new image has been successfully uploaded, the app should delete the previously saved image before replacing the entirety of the contents of the user's `avatar` in the database.
 I want you to fully develop and implement this. Here is some documentation to help:
 
 ```
-Avatar
-Avatars are found all over ui design from lists to profile screens. They are commonly used to represent a user and can contain photos, icons, or even text.
+Expo ImagePicker
+
+
+A library that provides access to the system's UI for selecting images and videos from the phone's library or taking a photo with the camera.
+
+expo-image-picker provides access to the system's UI for selecting images and videos from the phone's library or taking a photo with the camera.
+
+Installation
+Terminal
+
+Copy
+
+npx expo install expo-image-picker
+If you are installing this in an existing React Native app, start by installing expo in your project. Then, follow the additional instructions as mentioned by the library's README under "Installation in bare React Native projects" section.
+
+Known issues 
+On iOS, when an image (usually of a higher resolution) is picked from the camera roll, the result of the cropped image gives the wrong value for the cropped rectangle in some cases. Unfortunately, this issue is with the underlying UIImagePickerController due to a bug in the closed-source tools built into iOS.
+
+Configuration in app config
+You can configure expo-image-picker using its built-in config plugin if you use config plugins in your project (EAS Build or npx expo run:[android|ios]). The plugin allows you to configure various properties that cannot be set at runtime and require building a new app binary to take effect.
+
+Are you using this library in a bare React Native app?
+Example app.json with config plugin
+app.json
+
+Copy
+
+
+{
+  "expo": {
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "The app accesses your photos to let you share them with your friends."
+        }
+      ]
+    ]
+  }
+}
+Configurable properties
+Name	Default	Description
+photosPermission	"Allow $(PRODUCT_NAME) to access your photos"	
+Only for: 
+
+A string to set the NSPhotoLibraryUsageDescription permission message.
+
+cameraPermission	"Allow $(PRODUCT_NAME) to access your camera"	
+Only for: 
+
+A string to set the NSCameraUsageDescription permission message.
+
+microphonePermission	"Allow $(PRODUCT_NAME) to access your microphone"	
+Only for: 
+
+A string to set the NSMicrophoneUsageDescription permission message.
 
 Usage
-Import
-import { Avatar } from '@rneui/themed';
+Image Picker
 
-Theme Key 
-Avatar
-
-Shape
-Hide Code
-<Stack row spacing={4}>
-  <Avatar
-    size={32}
-    rounded
-    icon={{ name: "pencil", type: "font-awesome" }}
-    containerStyle={{ backgroundColor: "#9700b9" }}
-  />
-  <Avatar
-    size={32}
-    icon={{ name: "pencil", type: "font-awesome" }}
-    containerStyle={{ backgroundColor: "#9700b9" }}
-  />
-</Stack>
-<Stack row spacing={4}>
-  <Avatar
-    size={32}
-    rounded
-    icon={{ name: "pencil", type: "font-awesome" }}
-    containerStyle={{ backgroundColor: "#9700b9" }}
-  />
-  <Avatar
-    size={32}
-    icon={{ name: "pencil", type: "font-awesome" }}
-    containerStyle={{ backgroundColor: "#9700b9" }}
-  />
-</Stack>
-Sizes
-Hide Code
-<Stack row spacing={4}>
-  <Avatar
-    size={24}
-    rounded
-    icon={{ name: "pencil", type: "font-awesome" }}
-    containerStyle={{ backgroundColor: "#9700b9" }}
-  />
-  <Avatar
-    size={32}
-    rounded
-    icon={{ name: "pencil", type: "font-awesome" }}
-    containerStyle={{ backgroundColor: "#9700b9" }}
-  />
-  <Avatar
-    size={48}
-    rounded
-    icon={{ name: "pencil", type: "font-awesome" }}
-    containerStyle={{ backgroundColor: "#9700b9" }}
-  />
-</Stack>
-<Stack row spacing={4}>
-  <Avatar
-    size={24}
-    rounded
-    icon={{ name: "pencil", type: "font-awesome" }}
-    containerStyle={{ backgroundColor: "#9700b9" }}
-  />
-  <Avatar
-    size={32}
-    rounded
-    icon={{ name: "pencil", type: "font-awesome" }}
-    containerStyle={{ backgroundColor: "#9700b9" }}
-  />
-  <Avatar
-    size={48}
-    rounded
-    icon={{ name: "pencil", type: "font-awesome" }}
-    containerStyle={{ backgroundColor: "#9700b9" }}
-  />
-</Stack>
-Image Avatar
+Copy
 
 
-Hide Code
-<Stack row spacing={4}>
-  <Avatar
-    size={32}
-    rounded
-    source={{ uri: "https://randomuser.me/api/portraits/men/36.jpg" }}
-  />
-  <Avatar
-    size={32}
-    rounded
-    source={{ uri: "https://randomuser.me/api/portraits/men/35.jpg" }}
-  />
-</Stack>
-<Stack row spacing={4}>
-  <Avatar
-    size={32}
-    rounded
-    source={{ uri: "https://randomuser.me/api/portraits/men/36.jpg" }}
-  />
-  <Avatar
-    size={32}
-    rounded
-    source={{ uri: "https://randomuser.me/api/portraits/men/35.jpg" }}
-  />
-</Stack>
-Letter Avatar
-Rd
-AB
-Hide Code
-<Stack row spacing={4}>
-  <Avatar
-    size={32}
-    rounded
-    title="Rd"
-    containerStyle={{ backgroundColor: "blue" }}
-  />
-  <Avatar
-    size={32}
-    rounded
-    title="AB"
-    containerStyle={{ backgroundColor: "purple" }}
-  />
-</Stack>
-<Stack row spacing={4}>
-  <Avatar
-    size={32}
-    rounded
-    title="Rd"
-    containerStyle={{ backgroundColor: "blue" }}
-  />
-  <Avatar
-    size={32}
-    rounded
-    title="AB"
-    containerStyle={{ backgroundColor: "purple" }}
-  />
-</Stack>
+Open in Snack
 
-Props
-Name	Type	Default	Description
-Component	React Component	Press handlers present then Pressable else View	Component for enclosing element (eg: TouchableHighlight, View, etc).
-ImageComponent	ComponentClass<{}, any>	undefined	Custom ImageComponent for Avatar.
-avatarStyle	ImageStyle	undefined	Style for avatar image.
-containerStyle	View Style	undefined	Styling for outer container.
-icon	AvatarIcon	undefined	Displays an icon as the main content of the Avatar. Cannot be used alongside title. When used with the source prop it will be used as the placeholder.
-iconStyle	Text Style	undefined	Extra styling for icon component.
-imageProps	ImageProps(Object)	undefined	Optional properties to pass to the avatar e.g "resizeMode".
-onLongPress	Function		Callback function when long pressing component.
-onPress	Function		Callback function when pressing component.
-onPressIn	GestureResponderEventHandler		Called when a touch is engaged before onPress.
-onPressOut	GestureResponderEventHandler		Called when a touch is released before onPress.
-overlayContainerStyle	Text Style	undefined	Style for the view outside image or icon.
-pressableProps	PressableProps except click handlers	None	
-renderCustomContent	ReactElement<{}, string | JSXElementConstructor<any>>	undefined	Custom element inside the avatar (by default, it's the title).
-rounded	boolean	false	Makes the avatar circular.
-size	number | small | medium | large | xlarge	small	Size of the avatar.
-source	ImageSourcePropType	undefined	Image source to be displayed on avatar.
-title	string	undefined	Renders title in the placeholder.
-titleStyle	Text Style	undefined	Style for the title.
+
+import { useState } from 'react';
+import { Button, Image, View, StyleSheet } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+
+export default function ImagePickerExample() {
+  const [image, setImage] = useState<string | null>(null);
+
+  const pickImage = async () => {
+    // No permissions request is necessary for launching the image library
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images', 'videos'],
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 1,
+    });
+
+    console.log(result);
+
+    if (!result.canceled) {
+      setImage(result.assets[0].uri);
+    }
+  };
+
+  return (
+    <View style={styles.container}>
+      <Button title="Pick an image from camera roll" onPress={pickImage} />
+      {image && <Image source={{ uri: image }} style={styles.image} />}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  image: {
+    width: 200,
+    height: 200,
+  },
+});
+When you run this example and pick an image, you will see the image that you picked show up in your app, and a similar log will be shown in the console:
+
+{
+  "assets": [
+    {
+      "assetId": "C166F9F5-B5FE-4501-9531",
+      "base64": null,
+      "duration": null,
+      "exif": null,
+      "fileName": "IMG.HEIC",
+      "fileSize": 6018901,
+      "height": 3025,
+      "type": "image",
+      "uri": "file:///data/user/0/host.exp.exponent/cache/cropped1814158652.jpg"
+      "width": 3024
+    }
+  ],
+  "canceled": false
+}
+With AWS S3
+AWS storage example
+An example of how to use AWS storage can be found in with-aws-storage-upload.
+
+See Amplify documentation guide to set up your project correctly.
+
+With Firebase
+Firebase storage example
+An example of how to use Firebase storage can be found in with-firebase-storage-upload.
+
+See Using Firebase guide to set up your project correctly.
+
+API
+import * as ImagePicker from 'expo-image-picker';
+Hooks
+useCameraPermissions(options)
+Parameter	Type
+options
+(optional)
+PermissionHookOptions<object>
+
+Check or request permissions to access the camera. This uses both requestCameraPermissionsAsync and getCameraPermissionsAsync to interact with the permissions.
+
+Returns:
+[null | PermissionResponse, RequestPermissionMethod<PermissionResponse>, GetPermissionMethod<PermissionResponse>]
+Example
+
+const [status, requestPermission] = ImagePicker.useCameraPermissions();
+useMediaLibraryPermissions(options)
+Parameter	Type
+options
+(optional)
+PermissionHookOptions<{
+  writeOnly: boolean
+}>
+
+Check or request permissions to access the media library. This uses both requestMediaLibraryPermissionsAsync and getMediaLibraryPermissionsAsync to interact with the permissions.
+
+Returns:
+[null | MediaLibraryPermissionResponse, RequestPermissionMethod<MediaLibraryPermissionResponse>, GetPermissionMethod<MediaLibraryPermissionResponse>]
+Example
+
+const [status, requestPermission] = ImagePicker.useMediaLibraryPermissions();
+Methods
+ImagePicker.getCameraPermissionsAsync()
+Checks user's permissions for accessing camera.
+
+Returns:
+Promise<CameraPermissionResponse>
+A promise that fulfills with an object of type CameraPermissionResponse.
+
+ImagePicker.getMediaLibraryPermissionsAsync(writeOnly)
+Parameter	Type	Description
+writeOnly
+(optional)
+boolean	
+Whether to request write or read and write permissions. Defaults to false
+
+Default:
+false
+
+Checks user's permissions for accessing photos.
+
+Returns:
+Promise<MediaLibraryPermissionResponse>
+A promise that fulfills with an object of type MediaLibraryPermissionResponse.
+
+ImagePicker.getPendingResultAsync()
+Android system sometimes kills the MainActivity after the ImagePicker finishes. When this happens, we lost the data selected from the ImagePicker. However, you can retrieve the lost data by calling getPendingResultAsync. You can test this functionality by turning on Don't keep activities in the developer options.
+
+Returns:
+Promise<(ImagePickerResult | ImagePickerErrorResult)[]>
+On Android: a promise that resolves to an array of objects of exactly same type as in ImagePicker.launchImageLibraryAsync or ImagePicker.launchCameraAsync if the ImagePicker finished successfully. Otherwise, to the array of ImagePickerErrorResult.
+On other platforms: an empty array.
+ImagePicker.launchCameraAsync(options)
+Parameter	Type	Description
+options
+(optional)
+ImagePickerOptions	
+An ImagePickerOptions object.
+
+Default:
+{}
+
+Display the system UI for taking a photo with the camera. Requires Permissions.CAMERA. On Android and iOS 10 Permissions.CAMERA_ROLL is also required. On mobile web, this must be called immediately in a user interaction like a button press, otherwise the browser will block the request without a warning.
+
+Note: Make sure that you handle MainActivity destruction on Android. See ImagePicker.getPendingResultAsync. Notes for Web: The system UI can only be shown after user activation (e.g. a Button press). Therefore, calling launchCameraAsync in componentDidMount, for example, will not work as intended. The cancelled event will not be returned in the browser due to platform restrictions and inconsistencies across browsers.
+
+Returns:
+Promise<ImagePickerResult>
+A promise that resolves to an object with canceled and assets fields. When the user canceled the action the assets is always null, otherwise it's an array of the selected media assets which have a form of ImagePickerAsset.
+
+ImagePicker.launchImageLibraryAsync(options)
+Parameter	Type	Description
+options
+(optional)
+ImagePickerOptions	
+An object extended by ImagePickerOptions.
+
+Default:
+{}
+
+Display the system UI for choosing an image or a video from the phone's library. Requires Permissions.MEDIA_LIBRARY on iOS 10 only. On mobile web, this must be called immediately in a user interaction like a button press, otherwise the browser will block the request without a warning.
+
+Animated GIFs support: On Android, if the selected image is an animated GIF, the result image will be an animated GIF too if and only if quality is explicitly set to 1.0 and allowsEditing is set to false. Otherwise compression and/or cropper will pick the first frame of the GIF and return it as the result (on Android the result will be a PNG). On iOS, both quality and cropping are supported.
+
+Notes for Web: The system UI can only be shown after user activation (e.g. a Button press). Therefore, calling launchImageLibraryAsync in componentDidMount, for example, will not work as intended. The cancelled event will not be returned in the browser due to platform restrictions and inconsistencies across browsers.
+
+Returns:
+Promise<ImagePickerResult>
+A promise that resolves to an object with canceled and assets fields. When the user canceled the action the assets is always null, otherwise it's an array of the selected media assets which have a form of ImagePickerAsset.
+
+ImagePicker.requestCameraPermissionsAsync()
+Asks the user to grant permissions for accessing camera. This does nothing on web because the browser camera is not used.
+
+Returns:
+Promise<CameraPermissionResponse>
+A promise that fulfills with an object of type CameraPermissionResponse.
+
+ImagePicker.requestMediaLibraryPermissionsAsync(writeOnly)
+Parameter	Type	Description
+writeOnly
+(optional)
+boolean	
+Whether to request write or read and write permissions. Defaults to false
+
+Default:
+false
+
+Asks the user to grant permissions for accessing user's photo. This method does nothing on web.
+
+Returns:
+Promise<MediaLibraryPermissionResponse>
+A promise that fulfills with an object of type MediaLibraryPermissionResponse.
+
+Interfaces
+PermissionResponse
+An object obtained by permissions get and request functions.
+
+Property	Type	Description
+canAskAgain	boolean	
+Indicates if user can be asked again for specific permission. If not, one should be directed to the Settings app in order to enable/disable the permission.
+
+expires	PermissionExpiration	
+Determines time when the permission expires.
+
+granted	boolean	
+A convenience boolean that indicates if the permission is granted.
+
+status	PermissionStatus	
+Determines the status of the permission.
+
+Types
+CameraPermissionResponse
+Type: PermissionResponse
+
+Alias for PermissionResponse type exported by expo-modules-core.
+
+ImagePickerAsset
+Represents an asset (image or video) returned by the image picker or camera.
+
+Property	Type	Description
+assetId
+(optional)
+string | null	
+Only for: 
+
+The unique ID that represents the picked image or video, if picked from the library. It can be used by expo-media-library to manage the picked asset.
+
+This might be null when the ID is unavailable or the user gave limited permission to access the media library. On Android, the ID is unavailable when the user selects a photo by directly browsing file system.
+
+base64
+(optional)
+string | null	
+When the base64 option is truthy, it is a Base64-encoded string of the selected image's JPEG data, otherwise null. If you prepend this with 'data:image/jpeg;base64,' to create a data URI, you can use it as the source of an Image element; for example:
+
+<Image
+  source={{ uri: 'data:image/jpeg;base64,' + asset.base64 }}
+  style={{ width: 200, height: 200 }}
+/>
+duration
+(optional)
+number | null	
+Length of the video in milliseconds or null if the asset is not a video.
+
+exif
+(optional)
+Record<string, any> | null	
+Only for: 
+
+The exif field is included if the exif option is truthy, and is an object containing the image's EXIF data. The names of this object's properties are EXIF tags and the values are the respective EXIF values for those tags.
+
+file
+(optional)
+File	
+Only for: 
+
+The web File object containing the selected media. This property is web-only and can be used to upload to a server with FormData.
+
+fileName
+(optional)
+string | null	
+Preferred filename to use when saving this item. This might be null when the name is unavailable or user gave limited permission to access the media library.
+
+fileSize
+(optional)
+number	
+File size of the picked image or video, in bytes.
+
+height	number	
+Height of the image or video.
+
+mimeType
+(optional)
+string	
+The MIME type of the selected asset or null if could not be determined.
+
+pairedVideoAsset
+(optional)
+ImagePickerAsset | null	
+Only for: 
+
+Contains information about the video paired with the image file. This property is only set when livePhotos media type was present in the mediaTypes array when launching the picker and a live photo was selected.
+
+type
+(optional)
+'image' | 'video' | 'livePhoto' | 'pairedVideo'	
+The type of the asset.
+
+'image' - for images.
+'video' - for videos.
+'livePhoto' - for live photos. (iOS only)
+'pairedVideo' - for videos paired with photos, which can be combined to create a live photo. (iOS only)
+uri	string	
+URI to the local image or video file (usable as the source of an Image element, in the case of an image) and width and height specify the dimensions of the media.
+
+width	number	
+Width of the image or video.
+
+ImagePickerCanceledResult
+Type representing canceled pick result.
+
+Property	Type	Description
+assets	null	
+null signifying that the request was canceled.
+
+canceled	true	
+Boolean flag set to true showing that the request was canceled.
+
+ImagePickerErrorResult
+Property	Type	Description
+code	string	
+The error code.
+
+exception
+(optional)
+string	
+The exception which caused the error.
+
+message	string	
+The error message.
+
+ImagePickerOptions
+Property	Type	Description
+allowsEditing
+(optional)
+boolean	
+Only for: 
+
+Whether to show a UI to edit the image after it is picked. On Android the user can crop and rotate the image and on iOS simply crop it.
+
+Cropping multiple images is not supported - this option is mutually exclusive with allowsMultipleSelection.
+On iOS, this option is ignored if allowsMultipleSelection is enabled.
+On iOS cropping a .bmp image will convert it to .png.
+Default:
+false
+allowsMultipleSelection
+(optional)
+boolean	
+Only for: 
+
+Whether or not to allow selecting multiple media files at once.
+
+Cropping multiple images is not supported - this option is mutually exclusive with allowsEditing. If this option is enabled, then allowsEditing is ignored.
+
+Default:
+false
+aspect
+(optional)
+[number, number]	
+An array with two entries [x, y] specifying the aspect ratio to maintain if the user is allowed to edit the image (by passing allowsEditing: true). This is only applicable on Android, since on iOS the crop rectangle is always a square.
+
+base64
+(optional)
+boolean	
+Whether to also include the image data in Base64 format.
+
+cameraType
+(optional)
+CameraType	
+Only for: 
+
+Selects the camera-facing type. The CameraType enum provides two options: front for the front-facing camera and back for the back-facing camera.
+
+On Android, the behavior of this option may vary based on the camera app installed on the device.
+Default:
+CameraType.back
+exif
+(optional)
+boolean	
+Only for: 
+
+Whether to also include the EXIF data for the image. On iOS the EXIF data does not include GPS tags in the camera case.
+
+legacy
+(optional)
+boolean	
+Only for: 
+
+Uses the legacy image picker on Android. This will allow media to be selected from outside the users photo library.
+
+Default:
+false
+mediaTypes
+(optional)
+MediaType | MediaType[] | MediaTypeOptions	
+Choose what type of media to pick.
+
+Default:
+'images'
+orderedSelection
+(optional)
+boolean	
+Only for: 
+
+Whether to display number badges when assets are selected. The badges are numbered in selection order. Assets are then returned in the exact same order they were selected.
+
+Assets should be returned in the selection order regardless of this option, but there is no guarantee that it is always true when this option is disabled.
+
+Default:
+false
+preferredAssetRepresentationMode
+(optional)
+UIImagePickerPreferredAssetRepresentationMode	
+Only for: 
+
+Choose preferred asset representation mode to use when loading assets.
+
+Default:
+ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Automatic
+presentationStyle
+(optional)
+UIImagePickerPresentationStyle	
+Only for: 
+
+Choose presentation style to customize view during taking photo/video.
+
+Default:
+ImagePicker.UIImagePickerPresentationStyle.Automatic
+quality
+(optional)
+number	
+Only for: 
+
+Specify the quality of compression, from 0 to 1. 0 means compress for small size, 1 means compress for maximum quality.
+
+Note: If the selected image has been compressed before, the size of the output file may be bigger than the size of the original image.
+
+Note: On iOS, if a .bmp or .png image is selected from the library, this option is ignored.
+
+Default:
+1.0
+selectionLimit
+(optional)
+number	
+Only for: 
+
+The maximum number of items that user can select. Applicable when allowsMultipleSelection is enabled. Setting the value to 0 sets the selection limit to the maximum that the system supports.
+
+Default:
+0
+videoExportPreset
+(optional)
+VideoExportPreset	
+Deprecated See videoExportPreset in Apple documentation.
+
+Specify preset which will be used to compress selected video.
+
+Default:
+ImagePicker.VideoExportPreset.Passthrough
+videoMaxDuration
+(optional)
+number	
+Maximum duration, in seconds, for video recording. Setting this to 0 disables the limit. Defaults to 0 (no limit).
+
+On iOS, when allowsEditing is set to true, maximum duration is limited to 10 minutes. This limit is applied automatically, if 0 or no value is specified.
+On Android, effect of this option depends on support of installed camera app.
+On Web this option has no effect - the limit is browser-dependant.
+videoQuality
+(optional)
+UIImagePickerControllerQualityType	
+Only for: 
+
+Specify the quality of recorded videos. Defaults to the highest quality available for the device.
+
+Default:
+ImagePicker.UIImagePickerControllerQualityType.High
+ImagePickerResult
+Literal Type: multiple types
+
+Type representing successful and canceled pick result.
+
+Acceptable values are: ImagePickerSuccessResult | ImagePickerCanceledResult
+
+ImagePickerSuccessResult
+Type representing successful pick result.
+
+Property	Type	Description
+assets	ImagePickerAsset[]	
+An array of picked assets.
+
+canceled	false	
+Boolean flag set to false showing that the request was successful.
+
+MediaLibraryPermissionResponse
+Extends PermissionResponse type exported by expo-modules-core, containing additional iOS-specific field.
+
+Type: PermissionResponse extended by:
+
+Property	Type	Description
+accessPrivileges
+(optional)
+'all' | 'limited' | 'none'	
+Indicates if your app has access to the whole or only part of the photo library. Possible values are:
+
+'all' if the user granted your app access to the whole photo library
+'limited' if the user granted your app access only to selected photos (only available on Android API 34+ and iOS 14.0+)
+'none' if user denied or hasn't yet granted the permission
+MediaType
+Literal Type: string
+
+Media types that can be picked by the image picker.
+
+'images' - for images.
+'videos' - for videos.
+'livePhotos' - for live photos (iOS only).
+When the livePhotos type is added to the media types array and a live photo is selected, the resulting ImagePickerAsset will contain an unaltered image and the pairedVideoAsset field will contain a video asset paired with the image. This option will be ignored when the allowsEditing option is enabled. Due to platform limitations live photos are returned at original quality, regardless of the quality option.
+
+When on Android or Web livePhotos type passed as a media type will be ignored.
+
+Acceptable values are: 'images' | 'videos' | 'livePhotos'
+
+OpenFileBrowserOptions
+Property	Type	Description
+allowsMultipleSelection	boolean	
+Only for: 
+
+Whether or not to allow selecting multiple media files at once.
+
+base64	boolean	
+Whether to also include the image data in Base64 format.
+
+capture
+(optional)
+boolean	-
+mediaTypes
+(optional)
+MediaType | MediaType[] | MediaTypeOptions	
+Choose what type of media to pick.
+
+Default:
+'images'
+PermissionExpiration
+Literal Type: multiple types
+
+Permission expiration time. Currently, all permissions are granted permanently.
+
+Acceptable values are: 'never' | number
+
+PermissionHookOptions
+Literal Type: multiple types
+
+Acceptable values are: PermissionHookBehavior | Options
+
+Enums
+CameraType
+back
+CameraType.back ＝ "back"
+Back/rear camera.
+
+front
+CameraType.front ＝ "front"
+Front camera
+
+Deprecated To set media types available in the image picker use an array of MediaType instead.
+
+MediaTypeOptions
+All
+MediaTypeOptions.All ＝ "All"
+Images and videos.
+
+Images
+MediaTypeOptions.Images ＝ "Images"
+Only images.
+
+Videos
+MediaTypeOptions.Videos ＝ "Videos"
+Only videos.
+
+PermissionStatus
+DENIED
+PermissionStatus.DENIED ＝ "denied"
+User has denied the permission.
+
+GRANTED
+PermissionStatus.GRANTED ＝ "granted"
+User has granted the permission.
+
+UNDETERMINED
+PermissionStatus.UNDETERMINED ＝ "undetermined"
+User hasn't granted or denied the permission yet.
+
+UIImagePickerControllerQualityType
+High
+UIImagePickerControllerQualityType.High ＝ 0
+Highest available resolution.
+
+Medium
+UIImagePickerControllerQualityType.Medium ＝ 1
+Depends on the device.
+
+Low
+UIImagePickerControllerQualityType.Low ＝ 2
+Depends on the device.
+
+VGA640x480
+UIImagePickerControllerQualityType.VGA640x480 ＝ 3
+640 × 480
+
+IFrame1280x720
+UIImagePickerControllerQualityType.IFrame1280x720 ＝ 4
+1280 × 720
+
+IFrame960x540
+UIImagePickerControllerQualityType.IFrame960x540 ＝ 5
+960 × 540
+
+UIImagePickerPreferredAssetRepresentationMode
+Picker preferred asset representation mode. Its values are directly mapped to the PHPickerConfigurationAssetRepresentationMode.
+
+Automatic
+UIImagePickerPreferredAssetRepresentationMode.Automatic ＝ "automatic"
+A mode that indicates that the system chooses the appropriate asset representation.
+
+Compatible
+UIImagePickerPreferredAssetRepresentationMode.Compatible ＝ "compatible"
+A mode that uses the most compatible asset representation.
+
+Current
+UIImagePickerPreferredAssetRepresentationMode.Current ＝ "current"
+A mode that uses the current representation to avoid transcoding, if possible.
+
+UIImagePickerPresentationStyle
+Picker presentation style. Its values are directly mapped to the UIModalPresentationStyle.
+
+AUTOMATIC
+UIImagePickerPresentationStyle.AUTOMATIC ＝ "automatic"
+The default presentation style chosen by the system. On older iOS versions, falls back to WebBrowserPresentationStyle.FullScreen.
+
+CURRENT_CONTEXT
+UIImagePickerPresentationStyle.CURRENT_CONTEXT ＝ "currentContext"
+A presentation style where the picker is displayed over the app's content.
+
+FORM_SHEET
+UIImagePickerPresentationStyle.FORM_SHEET ＝ "formSheet"
+A presentation style that displays the picker centered in the screen.
+
+FULL_SCREEN
+UIImagePickerPresentationStyle.FULL_SCREEN ＝ "fullScreen"
+A presentation style in which the presented picker covers the screen.
+
+OVER_CURRENT_CONTEXT
+UIImagePickerPresentationStyle.OVER_CURRENT_CONTEXT ＝ "overCurrentContext"
+A presentation style where the picker is displayed over the app's content.
+
+OVER_FULL_SCREEN
+UIImagePickerPresentationStyle.OVER_FULL_SCREEN ＝ "overFullScreen"
+A presentation style in which the picker view covers the screen.
+
+PAGE_SHEET
+UIImagePickerPresentationStyle.PAGE_SHEET ＝ "pageSheet"
+A presentation style that partially covers the underlying content.
+
+POPOVER
+UIImagePickerPresentationStyle.POPOVER ＝ "popover"
+A presentation style where the picker is displayed in a popover view.
+
+VideoExportPreset
+Passthrough
+VideoExportPreset.Passthrough ＝ 0
+Resolution: Unchanged • Video compression: None • Audio compression: None
+
+LowQuality
+VideoExportPreset.LowQuality ＝ 1
+Resolution: Depends on the device • Video compression: H.264 • Audio compression: AAC
+
+MediumQuality
+VideoExportPreset.MediumQuality ＝ 2
+Resolution: Depends on the device • Video compression: H.264 • Audio compression: AAC
+
+HighestQuality
+VideoExportPreset.HighestQuality ＝ 3
+Resolution: Depends on the device • Video compression: H.264 • Audio compression: AAC
+
+H264_640x480
+VideoExportPreset.H264_640x480 ＝ 4
+Resolution: 640 × 480 • Video compression: H.264 • Audio compression: AAC
+
+H264_960x540
+VideoExportPreset.H264_960x540 ＝ 5
+Resolution: 960 × 540 • Video compression: H.264 • Audio compression: AAC
+
+H264_1280x720
+VideoExportPreset.H264_1280x720 ＝ 6
+Resolution: 1280 × 720 • Video compression: H.264 • Audio compression: AAC
+
+H264_1920x1080
+VideoExportPreset.H264_1920x1080 ＝ 7
+Resolution: 1920 × 1080 • Video compression: H.264 • Audio compression: AAC
+
+H264_3840x2160
+VideoExportPreset.H264_3840x2160 ＝ 8
+Resolution: 3840 × 2160 • Video compression: H.264 • Audio compression: AAC
+
+HEVC_1920x1080
+VideoExportPreset.HEVC_1920x1080 ＝ 9
+Resolution: 1920 × 1080 • Video compression: HEVC • Audio compression: AAC
+
+HEVC_3840x2160
+VideoExportPreset.HEVC_3840x2160 ＝ 10
+Resolution: 3840 × 2160 • Video compression: HEVC • Audio compression: AAC
+
+Permissions
+Android
+The following permissions are added automatically through the library AndroidManifest.xml.
+
+Android Permission	Description
+CAMERA
+
+Required to be able to access the camera device.
+
+READ_EXTERNAL_STORAGE
+
+Allows an application to read from external storage.
+
+WRITE_EXTERNAL_STORAGE
+
+Allows an application to write to external storage.
+
+iOS
+The following usage description keys are used by the APIs in this library.
+
+Info.plist Key	Description
+NSMicrophoneUsageDescription
+
+A message that tells the user why the app is requesting access to the device’s microphone.
+NSPhotoLibraryUsageDescription
+
+A message that tells the user why the app is requesting access to the user’s photo library.
+NSCameraUsageDescription
+
+A message that tells the user why the app is requesting access to the device’s camera.
+```
+
+And here is a script from a previous project of mine, that used a similar kind of behavior:
+
+```javascript
+// screens\Profile.js
+import React, { useState, useEffect } from "react";
+import { SafeAreaView, Text, TouchableOpacity, View, StyleSheet, Image, Alert, ActivityIndicator } from "react-native";
+import { Ionicons } from '@expo/vector-icons'
+import { colors } from "../config/constants";
+import { auth, database } from '../config/firebase';
+import Cell from "../components/Cell";
+import { useNavigation } from "@react-navigation/native";
+import * as ImagePicker from 'expo-image-picker';
+import { doc, getDoc, updateDoc } from "firebase/firestore";
+
+const Profile = () => {
+    const navigation = useNavigation();
+    const [avatar, setAvatar] = useState(null);
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        const fetchUserAvatar = async () => {
+            const userDoc = await getDoc(doc(database, 'users', auth.currentUser.email));
+            if (userDoc.exists()) {
+                const userData = userDoc.data();
+                if (userData.avatar) {
+                    setAvatar(userData.avatar);
+                }
+            }
+        };
+        fetchUserAvatar();
+    }, []);
+
+    const changeName = () => {
+        alert('Change Name');
+    };
+
+    const displayEmail = () => {
+        alert('Display Email');
+    };
+
+    const changePP = async () => {
+        let permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+        if (permissionResult.granted === false) {
+            Alert.alert('Permission required', 'Permission to access media library is required!');
+            return;
+        }
+
+        let pickerResult = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.5,
+        });
+
+        if (!pickerResult.canceled) {
+            const selectedImage = pickerResult.assets[0].uri;
+            setLoading(true);
+            await uploadImage(selectedImage);
+            setLoading(false);
+        }
+    };
+
+    const uploadImage = async (uri) => {
+        try {
+            const formData = new FormData();
+
+            const uriParts = uri.split('.');
+            const fileType = uriParts[uriParts.length - 1];
+
+            formData.append('image', {
+                uri: uri,
+                name: `avatar.${fileType}`,
+                type: `image/${fileType}`,
+            });
+
+            const clientId = '094005370d443cb'; // Replace with your Imgur client ID
+            const authHeader = 'Client-ID ' + clientId;
+
+            const response = await fetch('https://api.imgur.com/3/image', {
+                method: 'POST',
+                headers: {
+                    Authorization: authHeader,
+                    Accept: 'application/json',
+                },
+                body: formData,
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                const imageData = result.data;
+
+                if (avatar && avatar !== 'none') {
+                    const oldDeleteHash = avatar.deletehash;
+                    if (oldDeleteHash) {
+                        try {
+                            const deleteResponse = await fetch(`https://api.imgur.com/3/image/${oldDeleteHash}`, {
+                                method: 'DELETE',
+                                headers: {
+                                    Authorization: authHeader,
+                                    Accept: 'application/json',
+                                },
+                            });
+                            const deleteResult = await deleteResponse.json();
+                            if (deleteResult.success) {
+                                console.log('Old avatar deleted successfully from Imgur');
+                            } else {
+                                console.error('Failed to delete old avatar from Imgur:', deleteResult);
+                            }
+                        } catch (deleteError) {
+                            console.error('Error deleting old avatar:', deleteError);
+                        }
+                    }
+                }
+
+                const userDocRef = doc(database, 'users', auth.currentUser.email);
+                await updateDoc(userDocRef, { avatar: imageData });
+
+                setAvatar(imageData);
+
+                Alert.alert('Success', 'Avatar updated successfully.');
+            } else {
+                console.error('Imgur upload failed:', result);
+                Alert.alert('Upload failed', 'Failed to upload image to Imgur.');
+            }
+
+        } catch (error) {
+            console.error('Error uploading image:', error);
+            Alert.alert('Error', 'An error occurred while uploading the image.');
+        }
+    };
+
+    const showPP = () => {
+        alert('Show PP');
+    };
+
+    useEffect(() => {
+        const unsubscribe = onSnapshot(doc(database, 'users', auth.currentUser.email), (doc) => {
+            if (doc.exists()) {
+                const userData = doc.data();
+                if (userData.avatar) {
+                    setAvatar(userData.avatar);
+                }
+            }
+        });
+        return () => unsubscribe();
+    }, []);
+
+    return (
+        <SafeAreaView style={styles.container}>
+            {loading ? (
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size='large' color={colors.teal} />
+                </View>
+            ) : (
+                <>
+                    <TouchableOpacity style={styles.avatar} onPress={showPP}>
+                        <View>
+                            {avatar ? (
+                                <Image source={{ uri: avatar.link }} style={styles.avatarImage} />
+                            ) : (
+                                <Text style={styles.avatarLabel}>
+                                    {
+                                        auth?.currentUser?.displayName != ''
+                                            ?
+                                            auth?.currentUser?.displayName.split(' ').reduce((prev, current) => `${prev}${current[0]}`, '')
+                                            :
+                                            auth?.currentUser?.email.split(' ').reduce((prev, current) => `${prev}${current[0]}`, '')
+                                    }
+                                </Text>
+                            )}
+                        </View>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={styles.iconContainer} onPress={changePP}>
+                        <Ionicons name="camera-outline" size={30} color='white' />
+                    </TouchableOpacity>
+
+                    <Cell
+                        title='Name'
+                        icon='person-outline'
+                        iconColor="black"
+                        subtitle={auth?.currentUser?.displayName}
+                        secondIcon='pencil-outline'
+                        onPress={() => changeName()}
+                        style={{ marginBottom: 5 }}
+                    />
+
+                    <Cell
+                        title='Email'
+                        subtitle={auth?.currentUser?.email}
+                        icon='mail-outline'
+                        iconColor="black"
+                        secondIcon='pencil-outline'
+                        style={{ marginBottom: 5 }}
+                        onPress={() => displayEmail()}
+                    />
+
+                    <Cell
+                        title='About'
+                        subtitle={'Available'}
+                        icon='information-outline'
+                        iconColor="black"
+                        secondIcon='pencil-outline'
+                        style={{ marginBottom: 5 }}
+                        onPress={() => navigation.navigate('About')}
+                    />
+                </>
+            )}
+        </SafeAreaView>
+    )
+}
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: '#000',
+        alignItems: 'center',
+    },
+    avatar: {
+        marginTop: 12,
+        width: 168,
+        height: 168,
+        borderRadius: 84,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: colors.primary,
+        overflow: 'hidden',
+    },
+    avatarLabel: {
+        fontSize: 20,
+        color: 'white'
+    },
+    avatarImage: {
+        width: 168,
+        height: 168,
+        borderRadius: 84,
+    },
+    iconContainer: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        alignContent: 'center',
+        justifyContent: 'center',
+        backgroundColor: colors.teal,
+        position: 'absolute',
+        right: 10,
+        top: 150,
+    },
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+    }
+})
+export default Profile;
 ```
