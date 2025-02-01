@@ -1131,4 +1131,137 @@ This all works well, but I want to add a new feature: the social page. When the 
 - a search bar (that does nothing for now)
 - a menu option looking button that says "Sharing with", that will open another seperate area showing just the title "Sharing with"
 
-I want you to fully develop and implement this. Do not add any of the actual functionality of these new elements.
+I want you to fully develop and implement this. Do not add any of the actual functionality of these new elements. Use `React Native Elements`. I have already ran `npm install @rneui/themed @rneui/base`. Here is some documentation:
+
+```
+SearchBar
+Usage
+Import
+import { SearchBar } from '@rneui/themed';
+
+Theme Key 
+SearchBar
+
+Default SearchBar
+
+Platform specific SearchBar
+iOS
+
+
+Android
+
+
+Interaction methods
+method	description
+focus	call focus on the textinput (example)
+blur	call blur on the textinput (example)
+clear	call clear on the textinput (example)
+cancel	(Android and iOS SearchBars only) call cancel on the SearchBar (left arrow on Android, Cancel button on iOS). This will basically blur the input and hide the keyboard (example)
+Calling methods on SearchBar
+Store a reference to the SearchBar in your component by using the ref prop provided by React (see docs):
+
+<SearchBar
+  ref={search => this.search = search}
+  ...
+/>
+
+You can then access SearchBar methods like so:
+
+this.search.focus();
+this.search.blur();
+this.search.clear();
+this.search.cancel(); // Only available if `platform` props is "ios" | "android"
+
+
+Props
+note
+Includes all Input props.
+
+Name	Type	Default	Description
+cancelButtonProps	Text Style		
+cancelButtonTitle	string		
+cancelIcon	IconNode		
+clearIcon	IconNode		Clear Icon
+containerStyle	View Style		Style for container
+inputContainerStyle	View Style		Style for input container
+inputStyle	Text Style		Input Style
+leftIconContainerStyle	View Style		Left Icon Container Style
+lightTheme	boolean		
+loadingProps	ActivityIndicatorProps		ActivityIndicatorProps
+onCancel	(() => any) | (() => any)		Callback Function on cancel icon press
+onClear	Function		
+onKeyboardHide	Function		Callback Function on keyboard hides
+platform	default | android | ios	default	
+rightIconContainerStyle	View Style		Right Icon Container Style
+round	boolean		
+searchIcon	IconNode		Icon for search
+showCancel	boolean		Show cancel
+showLoading	boolean		Show loading
+Playground
+Type query here...
+platform [?]
+
+default
+
+ios
+
+android
+clearIcon [?]
+
+searchIcon [?]
+
+cancelIcon [?]
+
+containerStyle [?]
+{}
+{}
+inputContainerStyle [?]
+{}
+{}
+inputStyle [?]
+{}
+{}
+leftIconContainerStyle [?]
+{}
+{}
+rightIconContainerStyle [?]
+{}
+{}
+
+lightTheme [?]
+loadingProps [?]
+{}
+{}
+onChangeText [?]
+(newVal) => setValue(newVal)
+(newVal) => setValue(newVal)
+onClearText [?]
+() => console.log(onClearText())
+() => console.log(onClearText())
+placeholder [?]
+Type query here...
+Type query here...
+placeholderTextColor [?]
+#888
+#888
+
+round [?]
+
+showCancel [?]
+
+showLoading [?]
+underlineColorAndroid [?]
+
+cancelButtonTitle [?]
+Cancel
+Cancel
+cancelButtonProps [?]
+{}
+{}
+onCancel [?]
+() => console.log(onCancel())
+() => console.log(onCancel())
+value [?]
+
+Format codeCopy codeCopy URLReset
+```
