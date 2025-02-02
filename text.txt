@@ -288,12 +288,13 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../firebaseConfig';
 import { get, ref, update, onValue, off } from 'firebase/database';
 import Radar from 'react-native-radar';
-import Mapbox, { MapView, LocationPuck } from '@rnmapbox/maps';
+import Mapbox, { MapView, LocationPuck, MarkerView } from '@rnmapbox/maps';
 import { MaterialIcons } from '@expo/vector-icons';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { SearchBar, ListItem, Divider, Avatar } from '@rneui/themed';
@@ -306,6 +307,71 @@ import {
   stopSharingLocation,
   stopReceivingLocation,
 } from '../sharingUtils';
+
+// ---------------------------------------------------------------------
+// New: UserMarker component for displaying a sharing user’s marker
+// ---------------------------------------------------------------------
+const UserMarker = ({ user }) => {
+  return (
+    <View style={markerStyles.container}>
+      <Avatar
+        rounded
+        source={
+          user.avatar && user.avatar.link
+            ? { uri: user.avatar.link }
+            : undefined
+        }
+        icon={
+          !user.avatar || !user.avatar.link
+            ? { name: 'person-outline', type: 'material', size: 24 }
+            : undefined
+        }
+        size={30}
+        containerStyle={
+          !user.avatar || !user.avatar.link
+            ? { backgroundColor: '#c2c2c2' }
+            : {}
+        }
+      />
+      <Text style={markerStyles.nameText}>{user.firstName}</Text>
+    </View>
+  );
+};
+
+const markerStyles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    padding: 5,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'gray',
+  },
+  avatar: {
+    width: 30,
+    height: 30,
+    borderRadius: 20,
+  },
+  defaultAvatar: {
+    width: 20,
+    height: 20,
+    borderRadius: 20,
+    backgroundColor: '#c2c2c2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  defaultAvatarText: {
+    color: 'white',
+    fontWeight: 'bold',
+  },
+  nameText: {
+    color: 'black',
+    marginLeft: 5,
+    fontSize: 16,
+  },
+});
+// ---------------------------------------------------------------------
 
 export default function HomeScreen() {
   // ------------------------------
@@ -329,12 +395,15 @@ export default function HomeScreen() {
   const [expanded2, setExpanded2] = useState(true);
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState([]);
-  // New: States for accordions lists (real-time sharing lists)
+  // Sharing lists from Realtime Database
   const [sharingWithList, setSharingWithList] = useState([]);
   const [receivingFromList, setReceivingFromList] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
   const [showSharingDialog, setShowSharingDialog] = useState(false);
   const [sharingStatus, setSharingStatus] = useState({ amSharing: false, amReceiving: false });
+
+  // NEW: Markers state – keyed by sharing user uid, with latest location & profile info
+  const [markers, setMarkers] = useState({});
 
   const IMGUR_CLIENT_ID = '4916641447bc9f6';
 
@@ -495,6 +564,50 @@ export default function HomeScreen() {
       off(receivingFromRef, 'value', receivingFromListener);
     };
   }, []);
+
+  // ------------------------------
+  // NEW: Setup realtime listeners for location updates for each user sharing with you.
+  // This effect attaches a listener on each user in receivingFromList so that when their
+  // "location" field changes in the DB, we update the markers state.
+  // ------------------------------
+  useEffect(() => {
+    const listeners = {};
+    if (receivingFromList.length > 0) {
+      receivingFromList.forEach((user) => {
+        const userRef = ref(db, `users/${user.uid}`);
+        const callback = (snapshot) => {
+          console.log('Location update for', user.uid);
+          const userData = snapshot.val();
+          if (userData && userData.location) {
+            setMarkers((prev) => ({
+              ...prev,
+              [user.uid]: {
+                ...userData,
+                location: userData.location, // Expecting { latitude, longitude }
+              },
+            }));
+          } else {
+            setMarkers((prev) => {
+              const newMarkers = { ...prev };
+              delete newMarkers[user.uid];
+              return newMarkers;
+            });
+          }
+        };
+        onValue(userRef, callback);
+        listeners[user.uid] = { ref: userRef, callback };
+      });
+    } else {
+      // No users are sharing with you—clear any markers.
+      setMarkers({});
+    }
+    return () => {
+      // Cleanup all listeners attached for each sharing user.
+      Object.values(listeners).forEach(({ ref: r, callback }) => {
+        off(r, 'value', callback);
+      });
+    };
+  }, [receivingFromList]);
 
   // ------------------------------
   // Validation for Name Fields
@@ -843,6 +956,25 @@ export default function HomeScreen() {
             radius: 50.0,
           }}
         />
+
+        {/* NEW: Render markers for each user sharing their location with you */}
+        {Object.keys(markers).map((uid) => {
+          const markerData = markers[uid];
+          if (!markerData.location) return null;
+          return (
+            <MarkerView
+              key={uid}
+              id={uid}
+              coordinate={[
+                markerData.location.longitude,
+                markerData.location.latitude,
+              ]}
+              allowOverlapWithPuck={true}
+            >
+              <UserMarker user={markerData} />
+            </MarkerView>
+          );
+        })}
       </MapView>
 
       {/* Top row with Settings (left) and Friends (right) buttons */}
@@ -1237,349 +1369,6 @@ const SharingStyles = StyleSheet.create({
 });
 ```
 
-screens/LoginScreen.js
-```javascript
-// screens/LoginScreen.js
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  Alert,
-  StyleSheet,
-  KeyboardAvoidingView,
-  ScrollView,
-  Platform,
-} from 'react-native';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../firebaseConfig';
-
-export default function LoginScreen({ navigation }) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-
-  const handleLogin = async () => {
-    try {
-      if (!email || !password) {
-        Alert.alert('Error', 'Please fill in all fields');
-        return;
-      }
-
-      await signInWithEmailAndPassword(auth, email.trim(), password);
-      // On success, the user is automatically tracked by `onAuthStateChanged`
-      // in App.js, which navigates them to Home screen
-    } catch (error) {
-      Alert.alert('Login Error', error.message);
-    }
-  };
-
-  return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView
-        contentContainerStyle={styles.scrollContainer}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={styles.inner}>
-          <Text style={styles.title}>Login</Text>
-
-          <TextInput
-            style={styles.input}
-            placeholder="Email"
-            placeholderTextColor="#999"
-            value={email}
-            onChangeText={(text) => setEmail(text)}
-            keyboardType="email-address"
-            autoCapitalize="none"
-          />
-
-          <TextInput
-            style={styles.input}
-            placeholder="Password"
-            placeholderTextColor="#999"
-            secureTextEntry
-            value={password}
-            onChangeText={(text) => setPassword(text)}
-          />
-
-          <TouchableOpacity style={styles.button} onPress={handleLogin}>
-            <Text style={styles.buttonText}>Log In</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
-            <Text style={{ marginTop: 20, color: '#0275d8' }}>
-              Don’t have an account? Sign up
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
-  );
-}
-
-const styles = StyleSheet.create({
-  scrollContainer: {
-    flexGrow: 1,
-  },
-  inner: {
-    flex: 1,
-    padding: 20,
-    justifyContent: 'center',
-    backgroundColor: '#212832', // or your preferred background
-  },
-  title: {
-    fontSize: 32,
-    color: '#fff',
-    marginBottom: 30,
-    textAlign: 'center',
-  },
-  input: {
-    width: '100%',
-    height: 50,
-    backgroundColor: '#333',
-    borderRadius: 5,
-    paddingHorizontal: 15,
-    color: '#fff',
-    marginBottom: 15,
-  },
-  button: {
-    height: 50,
-    backgroundColor: '#00ADB5',
-    borderRadius: 5,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 15,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 18,
-  },
-});
-```
-
-screens/SignupScreen.js
-```javascript
-// screens/SignupScreen.js
-import React, { useState } from 'react';
-import {
-    View,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    Alert,
-    StyleSheet,
-    KeyboardAvoidingView,
-    ScrollView,
-    Platform,
-} from 'react-native';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { ref, set } from 'firebase/database';
-
-import { auth, db } from '../firebaseConfig';
-
-export default function SignupScreen({ navigation }) {
-    const [firstName, setFirstName] = useState('');
-    const [lastName, setLastName] = useState('');
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-
-    const handleSignup = async () => {
-        try {
-            if (!firstName || !lastName || !email || !password) {
-                Alert.alert('Error', 'Please fill in all fields');
-                return;
-            }
-            const userCredential = await createUserWithEmailAndPassword(
-                auth,
-                email.trim(),
-                password
-            );
-            const user = userCredential.user;
-            // Save user data to the Realtime Database
-            await set(ref(db, 'users/' + user.uid), {
-                createdAt: { ".sv": "timestamp" },
-                firstName: firstName.trim(),
-                lastName: lastName.trim(),
-                email: email.trim(),
-            });
-            Alert.alert('Success', 'Account created successfully');
-        } catch (error) {
-            Alert.alert('Signup Error', error.message);
-        }
-    };
-
-    return (
-        <KeyboardAvoidingView
-            style={{ flex: 1 }}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-            <ScrollView
-                contentContainerStyle={styles.scrollContainer}
-                keyboardShouldPersistTaps="handled"
-            >
-                <View style={styles.inner}>
-                    <Text style={styles.title}>Sign Up</Text>
-
-                    <TextInput
-                        style={styles.input}
-                        placeholder="First Name"
-                        placeholderTextColor="#999"
-                        value={firstName}
-                        onChangeText={setFirstName}
-                    />
-                    <TextInput
-                        style={styles.input}
-                        placeholder="Last Name"
-                        placeholderTextColor="#999"
-                        value={lastName}
-                        onChangeText={setLastName}
-                    />
-                    <TextInput
-                        style={styles.input}
-                        placeholder="Email"
-                        placeholderTextColor="#999"
-                        value={email}
-                        onChangeText={setEmail}
-                        keyboardType="email-address"
-                        autoCapitalize="none"
-                    />
-                    <TextInput
-                        style={styles.input}
-                        placeholder="Password"
-                        placeholderTextColor="#999"
-                        secureTextEntry
-                        value={password}
-                        onChangeText={setPassword}
-                    />
-
-                    <TouchableOpacity style={styles.button} onPress={handleSignup}>
-                        <Text style={styles.buttonText}>Create Account</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity onPress={() => navigation.navigate('Login')}>
-                        <Text style={{ marginTop: 20, color: '#0275d8' }}>
-                            Already have an account? Log in
-                        </Text>
-                    </TouchableOpacity>
-                </View>
-            </ScrollView>
-        </KeyboardAvoidingView>
-    );
-}
-
-const styles = StyleSheet.create({
-    scrollContainer: {
-        flexGrow: 1,
-    },
-    inner: {
-        flex: 1,
-        padding: 20,
-        justifyContent: 'center',
-    },
-    title: {
-        fontSize: 32,
-        color: '#fff',
-        marginBottom: 30,
-        textAlign: 'center',
-    },
-    input: {
-        width: '100%',
-        height: 50,
-        backgroundColor: '#333',
-        borderRadius: 5,
-        paddingHorizontal: 15,
-        color: '#fff',
-        marginBottom: 15,
-    },
-    button: {
-        height: 50,
-        backgroundColor: '#00ADB5',
-        borderRadius: 5,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginTop: 15,
-    },
-    buttonText: {
-        color: '#fff',
-        fontSize: 18,
-    },
-});
-```
-
-screens/LoadingScreen.js
-```javascript
-// screens/LoadingScreen.js
-import React from 'react';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
-
-export default function LoadingScreen() {
-  return (
-    <View style={styles.container}>
-      {/* Simple spinner in the center */}
-      <ActivityIndicator size="large" color="#00ADB5" />
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#212832',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
-```
-
-screens/PermissionScreen.js
-```javascript
-// screens/PermissionScreen.js
-import React from 'react';
-import { View, Text, Button, StyleSheet } from 'react-native';
-
-export default function PermissionScreen({
-  title = 'Permissions Required',
-  message = 'We need location permissions.',
-  buttonText = 'Open Settings',
-  onPressButton,
-}) {
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>{title}</Text>
-      <Text style={styles.message}>{message}</Text>
-      {onPressButton && (
-        <Button title={buttonText} onPress={onPressButton} />
-      )}
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#212832',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  title: {
-    color: '#fff',
-    fontSize: 20,
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  message: {
-    color: '#fff',
-    fontSize: 16,
-    marginBottom: 24,
-    textAlign: 'center',
-  },
-});
-```
-
 sharingUtils.js
 ```javascript
 // sharingUtils.js
@@ -1691,7 +1480,7 @@ package.json
 {
   "name": "loco",
   "license": "0BSD",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "main": "index.js",
   "scripts": {
     "start": "expo start --dev-client",
@@ -1704,11 +1493,16 @@ package.json
     "@react-native-async-storage/async-storage": "1.23.1",
     "@react-navigation/native": "^7.0.14",
     "@react-navigation/stack": "^7.1.1",
+    "@rneui/base": "^4.0.0-rc.7",
+    "@rneui/themed": "^4.0.0-rc.8",
     "@rnmapbox/maps": "^10.1.33",
     "dotenv": "^16.4.7",
     "expo": "~52.0.24",
     "expo-background-fetch": "~13.0.4",
     "expo-dev-client": "~5.0.9",
+    "expo-image-manipulator": "~13.0.6",
+    "expo-image-picker": "~16.0.5",
+    "expo-intent-launcher": "~12.0.2",
     "expo-location": "~18.0.5",
     "expo-status-bar": "~2.0.0",
     "expo-task-manager": "~12.0.4",
@@ -1719,6 +1513,7 @@ package.json
     "react-native-keyboard-aware-scroll-view": "^0.9.5",
     "react-native-maps": "1.18.0",
     "react-native-radar": "^3.19.1",
+    "react-native-reanimated": "~3.16.1",
     "react-native-safe-area-context": "4.12.0",
     "react-native-screens": "~4.4.0"
   },
@@ -1738,7 +1533,7 @@ export default ({ config }) => {
     ...config,
     "name": "loco",
     "slug": "loco",
-    "version": "0.1.3",
+    "version": "0.1.4",
     "orientation": "portrait",
     "icon": "./assets/icon.jpg",
     "userInterfaceStyle": "dark",
@@ -1782,7 +1577,8 @@ export default ({ config }) => {
         {
           "locationWhenInUsePermission": "Show current location on map."
         }
-      ]
+      ],
+      ["expo-image-picker"]
     ],
     "ios": {
       "supportsTablet": true,
@@ -1829,164 +1625,188 @@ export default ({ config }) => {
 };
 ```
 
-This all works well, but I want to keep implementing the location sharing features. On the Home screen, I now want the map to display the user's that are sharing their location with me. Each user should be shown with their avatar (the picture from the database, or the avatar using the icon, like in the People modal), along with their first name on the right side (in black). These pucks/markers should move in real time as the updates come in. I want you to fully develop and implement this. Here is some documentation to help:
+This all works well, but I want to now add a new feature to the home screen. I want to have a Bottom Sheet that will show a list of all the user that have shared their location with me. Each user item in that list should look like the ones from the People modal, except have a placeholder text instead of any status text (and don't have them do anything on click for now). I want it to look and feel like iOS's FindMy app: the bottom sheet should take up a bit less than half the screen by default, can be fully minimised, but can also be swipped to take up the entire screen height. I want you to fully develop and implement this. Here is some documentation to help:
 
 ```
-Marker View
-Shows marker view and poitn annotations
+React Native Bottom Sheet
+Reanimated v3 version Reanimated v2 version Reanimated v1 version
+license npm runs with expo
+NPM Downloads
 
-import React from 'react';
-import { Button, StyleSheet, View, Text, TouchableOpacity } from 'react-native';
-import Mapbox from '@rnmapbox/maps';
+A performant interactive bottom sheet with fully configurable options 🚀
 
-import Bubble from '../common/Bubble';
+Features
+⭐️ Support React Native Web, read more.
+⭐️ Dynamic Sizing, read more.
+⭐️ Support FlashList, read more.
+Modal presentation view, Bottom Sheet Modal.
+Smooth gesture interactions & snapping animations.
+Seamless keyboard handling for iOS & Android.
+Support pull to refresh for scrollables.
+Support FlatList, SectionList, ScrollView & View scrolling interactions, read more.
+Support React Navigation Integration, read more.
+Compatible with Reanimated v1-3.
+Accessibility support.
+Written in TypeScript.
+Installation
+yarn add @gorhom/bottom-sheet@^5
+
+Dependencies
+This library needs these dependencies to be installed in your project before you can use it:
+
+yarn add react-native-reanimated react-native-gesture-handler
+
+Using Expo?
+
+npx expo install react-native-reanimated react-native-gesture-handler
+
+info
+React Native Gesture Handler v3 needs extra steps to finalize its installation, please follow their installation instructions. Please make sure to wrap your App with GestureHandlerRootView when you've upgraded to React Native Gesture Handler ^3.
+
+React Native Reanimated v3 needs extra steps to finalize its installation, please follow their installation instructions.
+```
+
+```
+Usage
+Here is a simple usage of the Bottom Sheet, with non-scrollable content. For more scrollable usage please read Scrollables.
+
+import React, { useCallback, useMemo, useRef } from 'react';
+import { View, Text, StyleSheet } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
+
+const App = () => {
+  // ref
+  const bottomSheetRef = useRef<BottomSheet>(null);
+
+  // callbacks
+  const handleSheetChanges = useCallback((index: number) => {
+    console.log('handleSheetChanges', index);
+  }, []);
+
+  // renders
+  return (
+    <GestureHandlerRootView style={styles.container}>
+      <BottomSheet
+        ref={bottomSheetRef}
+        onChange={handleSheetChanges}
+      >
+        <BottomSheetView style={styles.contentContainer}>
+          <Text>Awesome 🎉</Text>
+        </BottomSheetView>
+      </BottomSheet>
+    </GestureHandlerRootView>
+  );
+};
 
 const styles = StyleSheet.create({
-  touchableContainer: { borderColor: 'black', borderWidth: 1.0, width: 60 },
-  touchable: {
-    backgroundColor: 'blue',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  touchableText: {
-    color: 'white',
-    fontWeight: 'bold',
-  },
-  matchParent: { flex: 1 },
-});
-
-const AnnotationContent = ({ title }: { title: string }) => (
-  <View style={styles.touchableContainer}>
-    <Text>{title}</Text>
-    <TouchableOpacity style={styles.touchable}>
-      <Text style={styles.touchableText}>Btn</Text>
-    </TouchableOpacity>
-  </View>
-);
-const INITIAL_COORDINATES: [number, number][] = [
-  [-73.99155, 40.73581],
-  [-73.99155, 40.73681],
-];
-
-const ShowMarkerView = () => {
-  const [pointList, setPointList] =
-    React.useState<GeoJSON.Position[]>(INITIAL_COORDINATES);
-  const [allowOverlapWithPuck, setAllowOverlapWithPuck] =
-    React.useState<boolean>(false);
-
-  const onPressMap = (e: GeoJSON.Feature) => {
-    const geometry = e.geometry as GeoJSON.Point;
-    setPointList((pl) => [...pl, geometry.coordinates]);
-  };
-
-  return (
-    <>
-      <Button
-        title={
-          allowOverlapWithPuck
-            ? 'allowOverlapWithPuck true'
-            : 'allowOverlapWithPuck false'
-        }
-        onPress={() => setAllowOverlapWithPuck((prev) => !prev)}
-      />
-      <Mapbox.MapView onPress={onPressMap} style={styles.matchParent}>
-        <Mapbox.Camera
-          defaultSettings={{
-            zoomLevel: 16,
-            centerCoordinate: pointList[0],
-          }}
-        />
-
-        <Mapbox.PointAnnotation coordinate={pointList[1]} id="pt-ann">
-          <AnnotationContent title={'this is a point annotation'} />
-        </Mapbox.PointAnnotation>
-
-        <Mapbox.MarkerView
-          coordinate={pointList[0]}
-          allowOverlapWithPuck={allowOverlapWithPuck}
-        >
-          <AnnotationContent title={'this is a marker view'} />
-        </Mapbox.MarkerView>
-
-        {pointList.slice(2).map((coordinate, index) => (
-          <Mapbox.PointAnnotation
-            coordinate={coordinate}
-            id={`pt-ann-${index}`}
-            key={`pt-ann-${index}`}
-          >
-            <AnnotationContent title={'this is a point annotation'} />
-          </Mapbox.PointAnnotation>
-        ))}
-
-        <Mapbox.NativeUserLocation />
-      </Mapbox.MapView>
-
-      <Bubble>
-        <Text>Tap on map to add a point annotation</Text>
-      </Bubble>
-    </>
-  );
-};
-
-export default ShowMarkerView;
-```
-
-Here is also exactly what I want the markers to look like:
-
-```javascript
-const UserMarker = ({ user }) => {
-  return (
-    <View style={markerStyles.container}>
-      {user.avatar && user.avatar.link ? (
-        <Image source={{ uri: user.avatar.link }} style={markerStyles.avatar} />
-      ) : (
-        <View style={markerStyles.defaultAvatar}>
-          <Text style={markerStyles.defaultAvatarText}>
-            {user.firstName ? user.firstName.charAt(0) : "?"}
-          </Text>
-        </View>
-      )}
-      <Text style={markerStyles.nameText}>{user.firstName}</Text>
-    </View>
-  );
-};
-
-const markerStyles = StyleSheet.create({
   container: {
-    flexDirection: 'row',
+    flex: 1,
+    backgroundColor: 'grey',
+  },
+  contentContainer: {
+    flex: 1,
+    padding: 36,
     alignItems: 'center',
-    backgroundColor: 'white',
-    padding: 5,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'gray',
-  },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-  },
-  defaultAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#c2c2c2',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  defaultAvatarText: {
-    color: 'white',
-    fontWeight: 'bold',
-  },
-  nameText: {
-    color: 'black',
-    marginLeft: 5,
-    fontSize: 16,
   },
 });
+
+export default App;
 ```
 
-Give me the full new `HomeScreen.js` script.
+```
+BottomSheetScrollView
+A pre-integrated React Native ScrollView with BottomSheet gestures.
+
+Props
+Inherits ScrollViewProps from react-native.
+
+focusHook
+This needed when bottom sheet used with multiple scrollables to allow bottom sheet detect the current scrollable ref, especially when used with React Navigation. You will need to provide useFocusEffect from @react-navigation/native.
+
+type	default	required
+function	React.useEffect	NO
+Ignored Props
+These props will be ignored if they were passed, because of the internal integration that uses them.
+
+scrollEventThrottle
+decelerationRate
+onScrollBeginDrag
+Example
+import React, { useCallback, useRef, useMemo } from "react";
+import { StyleSheet, View, Text, Button } from "react-native";
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import BottomSheet, { BottomSheetScrollView } from "@gorhom/bottom-sheet";
+
+const App = () => {
+  // hooks
+  const sheetRef = useRef<BottomSheet>(null);
+
+  // variables
+  const data = useMemo(
+    () =>
+      Array(50)
+        .fill(0)
+        .map((_, index) => `index-${index}`),
+    []
+  );
+  const snapPoints = useMemo(() => ["25%", "50%", "90%"], []);
+
+  // callbacks
+  const handleSheetChange = useCallback((index) => {
+    console.log("handleSheetChange", index);
+  }, []);
+  const handleSnapPress = useCallback((index) => {
+    sheetRef.current?.snapToIndex(index);
+  }, []);
+  const handleClosePress = useCallback(() => {
+    sheetRef.current?.close();
+  }, []);
+
+  // render
+  const renderItem = useCallback(
+    (item) => (
+      <View key={item} style={styles.itemContainer}>
+        <Text>{item}</Text>
+      </View>
+    ),
+    []
+  );
+  return (
+    <GestureHandlerRootView style={styles.container}>
+      <Button title="Snap To 90%" onPress={() => handleSnapPress(2)} />
+      <Button title="Snap To 50%" onPress={() => handleSnapPress(1)} />
+      <Button title="Snap To 25%" onPress={() => handleSnapPress(0)} />
+      <Button title="Close" onPress={() => handleClosePress()} />
+      <BottomSheet
+        ref={sheetRef}
+        index={1}
+        snapPoints={snapPoints}
+        enableDynamicSizing={false}
+        onChange={handleSheetChange}
+      >
+        <BottomSheetScrollView contentContainerStyle={styles.contentContainer}>
+          {data.map(renderItem)}
+        </BottomSheetScrollView>
+      </BottomSheet>
+    </GestureHandlerRootView>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    paddingTop: 200,
+  },
+  contentContainer: {
+    backgroundColor: "white",
+  },
+  itemContainer: {
+    padding: 6,
+    margin: 6,
+    backgroundColor: "#eee",
+  },
+});
+
+export default App;
+```
