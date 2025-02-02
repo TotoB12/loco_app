@@ -49,7 +49,8 @@ export default ({ config }) => {
         {
           "locationWhenInUsePermission": "Show current location on map."
         }
-      ]
+      ],
+      ["expo-image-picker"]
     ],
     "ios": {
       "supportsTablet": true,

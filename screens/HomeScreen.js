@@ -9,6 +9,8 @@ import {
   TextInput,
   SafeAreaView,
   ScrollView,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../firebaseConfig';
@@ -18,8 +20,13 @@ import Mapbox, { MapView, LocationPuck } from '@rnmapbox/maps';
 import { MaterialIcons } from '@expo/vector-icons';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { SearchBar, ListItem, Divider, Avatar } from '@rneui/themed';
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 
 export default function HomeScreen() {
+  // ------------------------------
+  // State variables
+  // ------------------------------
   const [currentLocation, setCurrentLocation] = useState(null);
 
   // Settings modal state
@@ -29,17 +36,20 @@ export default function HomeScreen() {
   const [firstNameError, setFirstNameError] = useState(false);
   const [lastNameError, setLastNameError] = useState(false);
   const [avatarUri, setAvatarUri] = useState(null);
+  const [avatarData, setAvatarData] = useState(null); // NEW: full avatar object from the DB
+  const [uploading, setUploading] = useState(false);
 
   // Social (People) modal state
   const [showSocial, setShowSocial] = useState(false);
-  // Accordion expansion state
   const [expanded1, setExpanded1] = useState(false);
   const [expanded2, setExpanded2] = useState(true);
-  // Search text state (currently non-functional)
   const [search, setSearch] = useState('');
 
+  // Set your Imgur client ID here (replace with your actual client ID)
+  const IMGUR_CLIENT_ID = '4916641447bc9f6';
+
   // ------------------------------
-  //  Mapbox Token & Telemetry
+  // Mapbox Token & Telemetry
   // ------------------------------
   useEffect(() => {
     Mapbox.setAccessToken(
@@ -49,10 +59,10 @@ export default function HomeScreen() {
   }, []);
 
   // ------------------------------
-  //  Radar foreground tracking
+  // Radar foreground tracking
   // ------------------------------
   useEffect(() => {
-    // Track once every 10 seconds while in foreground
+    // Track location once every 10 seconds when in foreground
     const intervalId = setInterval(() => {
       Radar.trackOnce({ desiredAccuracy: 'high' })
         .then((result) => {
@@ -69,9 +79,9 @@ export default function HomeScreen() {
   }, []);
 
   // ------------------------------
-  //  When Settings modal opens:
-  //    - Reset error states
-  //    - Fetch current profile data from the DB
+  // When Settings modal opens:
+  //   - Reset error states
+  //   - Fetch current profile data from the DB
   // ------------------------------
   useEffect(() => {
     if (showSettings) {
@@ -85,9 +95,11 @@ export default function HomeScreen() {
               const data = snapshot.val();
               setSettingsFirstName(data.firstName || '');
               setSettingsLastName(data.lastName || '');
-              if (data.avatar && data.avatar.link) {
-                setAvatarUri(data.avatar.link);
+              if (data.avatar) {
+                setAvatarData(data.avatar);
+                setAvatarUri(data.avatar.link || null);
               } else {
+                setAvatarData(null);
                 setAvatarUri(null);
               }
             }
@@ -100,17 +112,13 @@ export default function HomeScreen() {
   }, [showSettings]);
 
   // ------------------------------
-  //  Validation function: only letters allowed, no spaces.
+  // Validation for Name Fields
   // ------------------------------
   const validateName = (name) => {
-    // Only letters, no spaces; must be non-empty and max 20 characters.
     const regex = /^[A-Za-z]+$/;
     return name.trim().length > 0 && name.length <= 20 && regex.test(name);
   };
 
-  // ------------------------------
-  //  Handlers for text input changes (update DB if valid)
-  // ------------------------------
   const handleFirstNameChange = (text) => {
     setSettingsFirstName(text);
     if (validateName(text)) {
@@ -142,7 +150,7 @@ export default function HomeScreen() {
   };
 
   // ------------------------------
-  //  Sign out logic
+  // Sign Out Logic
   // ------------------------------
   const handleSignOut = async () => {
     try {
@@ -153,7 +161,160 @@ export default function HomeScreen() {
   };
 
   // ------------------------------
-  //  Render
+  // New: Delete an image from Imgur using its deletehash
+  // ------------------------------
+  const deleteImgurImage = async (deleteHash) => {
+    try {
+      const authHeader = 'Client-ID ' + IMGUR_CLIENT_ID;
+      const response = await fetch(`https://api.imgur.com/3/image/${deleteHash}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: authHeader,
+          Accept: 'application/json',
+        },
+      });
+      const result = await response.json();
+      if (result.success) {
+        console.log('Old avatar deleted successfully from Imgur');
+      } else {
+        console.error('Failed to delete old avatar from Imgur:', result);
+      }
+    } catch (error) {
+      console.error('Error deleting old avatar:', error);
+    }
+  };
+
+  const resizeImageIfNeeded = async (uri, width, height) => {
+    // Check if the image already fits within the 1000x1000 limit.
+    if (width <= 500 && height <= 500) {
+      return uri;
+    }
+
+    // Calculate the scale factor to maintain aspect ratio
+    const maxDimension = 1000;
+    const scaleFactor = Math.min(maxDimension / width, maxDimension / height);
+    const newWidth = Math.round(width * scaleFactor);
+    const newHeight = Math.round(height * scaleFactor);
+
+    // Use ImageManipulator to resize the image
+    const manipResult = await ImageManipulator.manipulateAsync(
+      uri,
+      [{ resize: { width: newWidth, height: newHeight } }],
+      { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
+    );
+    return manipResult.uri;
+  };
+
+  // ------------------------------
+  // New: Upload image to Imgur and update the DB
+  // ------------------------------
+  const uploadImage = async (uri) => {
+    try {
+      setUploading(true);
+      let formData = new FormData();
+      const uriParts = uri.split('.');
+      const fileType = uriParts[uriParts.length - 1];
+      formData.append('image', {
+        uri: uri,
+        name: `avatar.${fileType}`,
+        type: `image/${fileType}`,
+      });
+
+      const authHeader = 'Client-ID ' + IMGUR_CLIENT_ID;
+      const response = await fetch('https://api.imgur.com/3/image', {
+        method: 'POST',
+        headers: {
+          Authorization: authHeader,
+          Accept: 'application/json',
+        },
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        // If a previous avatar exists, delete it first
+        if (avatarData && avatarData.deletehash) {
+          await deleteImgurImage(avatarData.deletehash);
+        }
+        const currentUser = auth.currentUser;
+        if (currentUser) {
+          // Update the user's record with the entire Imgur response data
+          await update(ref(db, 'users/' + currentUser.uid), { avatar: result.data });
+          setAvatarData(result.data);
+          setAvatarUri(result.data.link);
+          Alert.alert('Success', 'Avatar updated successfully.');
+        } else {
+          Alert.alert('Error', 'User not logged in.');
+        }
+      } else {
+        console.error('Imgur upload failed:', result);
+        Alert.alert('Upload failed', 'Failed to upload image to Imgur.');
+      }
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      Alert.alert('Error', 'An error occurred while uploading the image.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // ------------------------------
+  // New: Handle image selection using expo-image-picker
+  // ------------------------------
+  const handleSelectImage = async () => {
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permissionResult.granted) {
+      Alert.alert('Permission required', 'Permission to access the media library is required!');
+      return;
+    }
+
+    let pickerResult = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 1,
+    });
+
+    if (!pickerResult.canceled) {
+      // The picker result includes an assets array; get the first asset.
+      const asset = pickerResult.assets[0];
+      // Use the asset's width and height from the picker result
+      const resizedUri = await resizeImageIfNeeded(asset.uri, asset.width, asset.height);
+      await uploadImage(resizedUri);
+    }
+  };
+
+  // ------------------------------
+  // New: Handle removing the current profile picture
+  // ------------------------------
+  const handleRemovePicture = async () => {
+    if (!avatarData || !avatarData.deletehash) {
+      Alert.alert('No avatar', 'No avatar to remove.');
+      return;
+    }
+    try {
+      setUploading(true);
+      await deleteImgurImage(avatarData.deletehash);
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        await update(ref(db, 'users/' + currentUser.uid), { avatar: null });
+        setAvatarData(null);
+        setAvatarUri(null);
+        Alert.alert('Success', 'Avatar removed successfully.');
+      } else {
+        Alert.alert('Error', 'User not logged in.');
+      }
+    } catch (error) {
+      console.error('Error removing avatar:', error);
+      Alert.alert('Error', 'An error occurred while removing the avatar.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // ------------------------------
+  // Render
   // ------------------------------
   return (
     <View style={styles.container}>
@@ -183,19 +344,10 @@ export default function HomeScreen() {
 
       {/* Top row with Settings (left) and Friends (right) buttons */}
       <View style={styles.topRow}>
-        {/* Settings Button */}
-        <TouchableOpacity
-          style={styles.iconButton}
-          onPress={() => setShowSettings(true)}
-        >
+        <TouchableOpacity style={styles.iconButton} onPress={() => setShowSettings(true)}>
           <MaterialIcons name="settings" size={24} color="black" />
         </TouchableOpacity>
-
-        {/* Friends Button */}
-        <TouchableOpacity
-          style={styles.iconButton}
-          onPress={() => setShowSocial(true)}
-        >
+        <TouchableOpacity style={styles.iconButton} onPress={() => setShowSocial(true)}>
           <FontAwesome5 name="user-friends" size={20} color="black" />
         </TouchableOpacity>
       </View>
@@ -217,7 +369,7 @@ export default function HomeScreen() {
         <Text style={styles.signOutText}>Log Out</Text>
       </TouchableOpacity>
 
-      {/* ------------- Redesigned Settings Modal ------------- */}
+      {/* ------------- Settings Modal ------------- */}
       <Modal
         animationType="slide"
         transparent={false}
@@ -231,11 +383,7 @@ export default function HomeScreen() {
               <MaterialIcons name="close" size={28} color="#000" />
             </TouchableOpacity>
           </View>
-          <ScrollView
-            style={styles.modalContent}
-            contentContainerStyle={styles.modalScroll}
-          >
-            {/* Profile Picture Section */}
+          <ScrollView style={styles.modalContent} contentContainerStyle={styles.modalScroll}>
             <View style={styles.avatarContainer}>
               <Avatar
                 size={100}
@@ -244,27 +392,32 @@ export default function HomeScreen() {
                 icon={!avatarUri ? { name: 'person', type: 'material' } : undefined}
                 containerStyle={styles.avatar}
               />
+              {uploading && (
+                <ActivityIndicator
+                  style={{ marginVertical: 10 }}
+                  size="small"
+                  color="#00ADB5"
+                />
+              )}
               <View style={styles.avatarButtonsContainer}>
                 <TouchableOpacity
                   style={styles.avatarButton}
-                  onPress={() => {
-                    // TODO: Implement image selection
-                  }}
+                  onPress={handleSelectImage}
+                  disabled={uploading}
                 >
                   <Text style={styles.avatarButtonText}>Select Image</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.avatarButton}
-                  onPress={() => {
-                    // TODO: Implement remove picture functionality
-                  }}
+                  onPress={handleRemovePicture}
+                  disabled={uploading}
                 >
                   <Text style={styles.avatarButtonText}>Remove Picture</Text>
                 </TouchableOpacity>
               </View>
             </View>
 
-            {/* First Name Field with Label */}
+            {/* First Name Field */}
             <Text style={styles.label}>First Name</Text>
             <TextInput
               style={[styles.input, firstNameError && styles.errorInput]}
@@ -273,7 +426,7 @@ export default function HomeScreen() {
               onChangeText={handleFirstNameChange}
             />
 
-            {/* Last Name Field with Label */}
+            {/* Last Name Field */}
             <Text style={styles.label}>Last Name</Text>
             <TextInput
               style={[styles.input, lastNameError && styles.errorInput]}
@@ -285,7 +438,7 @@ export default function HomeScreen() {
         </SafeAreaView>
       </Modal>
 
-      {/* ------------- Redesigned People (Social) Modal ------------- */}
+      {/* ------------- People (Social) Modal ------------- */}
       <Modal
         animationType="slide"
         transparent={false}
@@ -299,10 +452,7 @@ export default function HomeScreen() {
               <MaterialIcons name="close" size={28} color="#000" />
             </TouchableOpacity>
           </View>
-          <ScrollView
-            style={styles.modalContent}
-            contentContainerStyle={styles.modalScroll}
-          >
+          <ScrollView style={styles.modalContent} contentContainerStyle={styles.modalScroll}>
             <SearchBar
               placeholder="Search..."
               onChangeText={setSearch}
@@ -329,7 +479,6 @@ export default function HomeScreen() {
               </ListItem>
             </ListItem.Accordion>
 
-            {/* divider */}
             <Divider
               style={{ width: '100%' }}
               insetType="middle"
@@ -360,13 +509,12 @@ export default function HomeScreen() {
 }
 
 // ------------------------------
-//  Styles
+// Styles
 // ------------------------------
 const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  // Container for the two top icons
   topRow: {
     position: 'absolute',
     top: 10,
@@ -375,9 +523,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: 15,
-    zIndex: 999, // Ensure the icons appear above the map.
+    zIndex: 999,
   },
-  // White circular background for each icon
   iconButton: {
     width: 47,
     height: 47,
@@ -385,12 +532,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     justifyContent: 'center',
     alignItems: 'center',
-    // Optional shadow on iOS
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 2,
-    // Optional elevation on Android
     elevation: 3,
   },
   locationInfo: {
@@ -418,7 +563,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
   },
-  // ----- Redesigned Modal Styles -----
   modalContainer: {
     flex: 1,
     backgroundColor: '#fff',
@@ -446,7 +590,6 @@ const styles = StyleSheet.create({
   modalScroll: {
     flexGrow: 1,
   },
-  // Reuse your existing input styles:
   input: {
     borderWidth: 1,
     borderColor: '#ccc',
@@ -457,14 +600,12 @@ const styles = StyleSheet.create({
   errorInput: {
     borderColor: 'red',
   },
-  // Label styles for input fields
   label: {
     fontSize: 16,
     color: '#000',
     marginBottom: 5,
     marginTop: 15,
   },
-  // Styles for the SearchBar components in the social modal
   searchContainer: {
     backgroundColor: 'transparent',
     borderTopWidth: 0,
@@ -479,7 +620,6 @@ const styles = StyleSheet.create({
   searchInput: {
     color: '#000',
   },
-  // ----- New Styles for Avatar/Profile Picture Section -----
   avatarContainer: {
     alignItems: 'center',
     marginVertical: 20,
@@ -502,4 +642,3 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
 });
-
