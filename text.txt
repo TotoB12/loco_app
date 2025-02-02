@@ -291,7 +291,7 @@ import {
 } from 'react-native';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../firebaseConfig';
-import { get, ref, update } from 'firebase/database';
+import { get, ref, update, onValue, off } from 'firebase/database';
 import Radar from 'react-native-radar';
 import Mapbox, { MapView, LocationPuck } from '@rnmapbox/maps';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -300,7 +300,12 @@ import { SearchBar, ListItem, Divider, Avatar } from '@rneui/themed';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 
-import { getSharingStatus, shareLocation, stopSharingLocation, stopReceivingLocation } from '../sharingUtils';
+import {
+  getSharingStatus,
+  shareLocation,
+  stopSharingLocation,
+  stopReceivingLocation,
+} from '../sharingUtils';
 
 export default function HomeScreen() {
   // ------------------------------
@@ -324,6 +329,9 @@ export default function HomeScreen() {
   const [expanded2, setExpanded2] = useState(true);
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState([]);
+  // New: States for accordions lists (real-time sharing lists)
+  const [sharingWithList, setSharingWithList] = useState([]);
+  const [receivingFromList, setReceivingFromList] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
   const [showSharingDialog, setShowSharingDialog] = useState(false);
   const [sharingStatus, setSharingStatus] = useState({ amSharing: false, amReceiving: false });
@@ -438,6 +446,55 @@ export default function HomeScreen() {
       setSearchResults([]);
     }
   }, [search]);
+
+  // ------------------------------
+  // Real-time Listeners for Sharing Lists
+  // ------------------------------
+  useEffect(() => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
+
+    const sharingWithRef = ref(db, `users/${currentUser.uid}/sharingWith`);
+    const receivingFromRef = ref(db, `users/${currentUser.uid}/receivingFrom`);
+
+    // Listener for "Sharing With" list:
+    const sharingWithListener = onValue(sharingWithRef, async (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        const uids = Object.keys(data);
+        const userPromises = uids.map(async (uid) => {
+          const userSnap = await get(ref(db, `users/${uid}`));
+          return userSnap.exists() ? { uid, ...userSnap.val() } : null;
+        });
+        const users = await Promise.all(userPromises);
+        setSharingWithList(users.filter((u) => u !== null));
+      } else {
+        setSharingWithList([]);
+      }
+    });
+
+    // Listener for "Receiving From" list:
+    const receivingFromListener = onValue(receivingFromRef, async (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        const uids = Object.keys(data);
+        const userPromises = uids.map(async (uid) => {
+          const userSnap = await get(ref(db, `users/${uid}`));
+          return userSnap.exists() ? { uid, ...userSnap.val() } : null;
+        });
+        const users = await Promise.all(userPromises);
+        setReceivingFromList(users.filter((u) => u !== null));
+      } else {
+        setReceivingFromList([]);
+      }
+    });
+
+    // Cleanup the listeners when unmounting:
+    return () => {
+      off(sharingWithRef, 'value', sharingWithListener);
+      off(receivingFromRef, 'value', receivingFromListener);
+    };
+  }, []);
 
   // ------------------------------
   // Validation for Name Fields
@@ -632,6 +689,69 @@ export default function HomeScreen() {
     }
   };
 
+  // ------------------------------
+  // New: Reusable Component for Displaying a User with Sharing Status
+  // ------------------------------
+  const UserListItem = ({ user, onPress }) => {
+    const [statusText, setStatusText] = useState('');
+
+    useEffect(() => {
+      const fetchStatus = async () => {
+        const currentUser = auth.currentUser;
+        if (!currentUser) return;
+        try {
+          const status = await getSharingStatus(currentUser.uid, user.uid);
+          let text = '';
+          if (status.amSharing && status.amReceiving) {
+            text = 'Both of you are sharing';
+          } else if (status.amSharing && !status.amReceiving) {
+            text = 'Receiving your location';
+          } else if (!status.amSharing && status.amReceiving) {
+            text = 'Is sharing with you';
+          } else {
+            text = 'Neither of you are sharing';
+          }
+          setStatusText(text);
+        } catch (err) {
+          console.error(err);
+        }
+      };
+      fetchStatus();
+    }, [user]);
+
+    return (
+      <ListItem bottomDivider onPress={() => onPress(user)}>
+        <Avatar
+          rounded
+          source={
+            user.avatar && user.avatar.link
+              ? { uri: user.avatar.link }
+              : undefined
+          }
+          icon={
+            !user.avatar || !user.avatar.link
+              ? { name: 'person-outline', type: 'material', size: 26 }
+              : undefined
+          }
+          containerStyle={
+            !user.avatar || !user.avatar.link
+              ? { backgroundColor: '#c2c2c2' }
+              : {}
+          }
+        />
+        <ListItem.Content>
+          <ListItem.Title>
+            {(`${user.firstName || ''} ${user.lastName || ''}`).trim()}
+          </ListItem.Title>
+          <ListItem.Subtitle>{statusText}</ListItem.Subtitle>
+        </ListItem.Content>
+      </ListItem>
+    );
+  };
+
+  // ------------------------------
+  // Sharing Dialog (same as before)
+  // ------------------------------
   function SharingDialog({
     targetUser,
     sharingStatus,
@@ -684,7 +804,7 @@ export default function HomeScreen() {
     );
   }
 
-  // Called when a search result is tapped.
+  // Called when a search result or list item is tapped.
   const handleUserPress = async (user) => {
     const currentUser = auth.currentUser;
     if (!currentUser) return;
@@ -846,37 +966,12 @@ export default function HomeScreen() {
               inputStyle={styles.searchInput}
             />
 
-            {/* If there is at least one character in the search field, hide the accordions and show results */}
+            {/* If there is at least one character in the search field, show search results */}
             {search.trim().length > 0 ? (
               <>
                 {searchResults.length > 0 ? (
                   searchResults.map((user) => (
-                    <ListItem bottomDivider key={user.uid} onPress={() => handleUserPress(user)}>
-                      <Avatar
-                        rounded
-                        source={
-                          user.avatar && user.avatar.link
-                            ? { uri: user.avatar.link }
-                            : undefined
-                        }
-                        icon={
-                          !user.avatar || !user.avatar.link
-                            ? { name: 'person-outline', type: 'material', size: 26 }
-                            : undefined
-                        }
-                        containerStyle={
-                          !user.avatar || !user.avatar.link
-                            ? { backgroundColor: '#c2c2c2' }
-                            : {}
-                        }
-                      />
-                      <ListItem.Content>
-                        <ListItem.Title>
-                          {(`${user.firstName || ''} ${user.lastName || ''}`).trim()}
-                        </ListItem.Title>
-                        <ListItem.Subtitle>placeholder</ListItem.Subtitle>
-                      </ListItem.Content>
-                    </ListItem>
+                    <UserListItem key={user.uid} user={user} onPress={handleUserPress} />
                   ))
                 ) : (
                   <Text style={{ textAlign: 'center', marginTop: 20 }}>
@@ -892,15 +987,18 @@ export default function HomeScreen() {
                       <ListItem.Title>Sharing With</ListItem.Title>
                     </ListItem.Content>
                   }
-                  animation="default"
                   isExpanded={expanded1}
                   onPress={() => setExpanded1(!expanded1)}
                 >
-                  <ListItem bottomDivider>
-                    <ListItem.Content>
-                      <ListItem.Title>User 1</ListItem.Title>
-                    </ListItem.Content>
-                  </ListItem>
+                  {sharingWithList.length > 0 ? (
+                    sharingWithList.map((user) => (
+                      <UserListItem key={user.uid} user={user} onPress={handleUserPress} />
+                    ))
+                  ) : (
+                    <Text style={{ margin: 10, textAlign: 'center' }}>
+                      You are not sharing your location yet.
+                    </Text>
+                  )}
                 </ListItem.Accordion>
 
                 <Divider
@@ -919,17 +1017,22 @@ export default function HomeScreen() {
                   isExpanded={expanded2}
                   onPress={() => setExpanded2(!expanded2)}
                 >
-                  <ListItem bottomDivider>
-                    <ListItem.Content>
-                      <ListItem.Title>User 2</ListItem.Title>
-                    </ListItem.Content>
-                  </ListItem>
+                  {receivingFromList.length > 0 ? (
+                    receivingFromList.map((user) => (
+                      <UserListItem key={user.uid} user={user} onPress={handleUserPress} />
+                    ))
+                  ) : (
+                    <Text style={{ margin: 10, textAlign: 'center' }}>
+                      Nobody has shared with you yet.
+                    </Text>
+                  )}
                 </ListItem.Accordion>
               </>
             )}
           </ScrollView>
         </SafeAreaView>
       </Modal>
+
       {showSharingDialog && selectedUser && (
         <Modal
           animationType="fade"
@@ -945,7 +1048,7 @@ export default function HomeScreen() {
                 sharingStatus={sharingStatus}
                 onShare={async () => {
                   await shareLocation(auth.currentUser.uid, selectedUser.uid);
-                  // Optionally, update sharingStatus if you wish.
+                  // Optionally, update sharingStatus if needed.
                 }}
                 onStopSharing={async () => {
                   await stopSharingLocation(auth.currentUser.uid, selectedUser.uid);
@@ -1111,10 +1214,8 @@ const dialogStyles = StyleSheet.create({
     padding: 20,
     marginHorizontal: 20,
     width: '80%',
-    // Optionally add shadows/elevation here
   },
 });
-
 
 const SharingStyles = StyleSheet.create({
   dialogContainer: {
@@ -1123,7 +1224,6 @@ const SharingStyles = StyleSheet.create({
     marginHorizontal: 20,
     borderRadius: 8,
     alignItems: 'center',
-    // You can add shadow/elevation for a nicer look
   },
   dialogMessage: {
     fontSize: 16,
@@ -1729,12 +1829,221 @@ export default ({ config }) => {
 };
 ```
 
-This all works well, but I want to keep implementing the location sharing features. On the People modal, in the search results, I want the placeholder text to be replaced with one of four different texts (similar to the sharing modal):
+This all works well, but I want to keep implementing the location sharing features. On the Home screen, I now want the map to display the user's that are sharing their location with me. Each user should be shown with their avatar (picture or icon as per usual), along with their first name on the right side (in black). These pucks/markers should move in real time as the updates come in. I want you to fully develop and implement this. Here is some documentation to help:
 
-"Is sharing with you"
-"Receiving your location"
-"Neither of you are sharing"
-"Both of you are sharing"
+```
+Marker View
+Shows marker view and poitn annotations
 
-Then, I want the two "Sharing With" and "Receiving Locations" accordions to actually show a list of the users that I am sharing my location with, and receiving locations from. If none, show a "You are not sharing your location yet" and "Nobody has shared with you yet". These user's should be displayed the exact same way as the search results, and have the same action when clicked on.
-I want you to fully develop and implement this.
+import React from 'react';
+import { Button, StyleSheet, View, Text, TouchableOpacity } from 'react-native';
+import Mapbox from '@rnmapbox/maps';
+
+import Bubble from '../common/Bubble';
+
+const styles = StyleSheet.create({
+  touchableContainer: { borderColor: 'black', borderWidth: 1.0, width: 60 },
+  touchable: {
+    backgroundColor: 'blue',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  touchableText: {
+    color: 'white',
+    fontWeight: 'bold',
+  },
+  matchParent: { flex: 1 },
+});
+
+const AnnotationContent = ({ title }: { title: string }) => (
+  <View style={styles.touchableContainer}>
+    <Text>{title}</Text>
+    <TouchableOpacity style={styles.touchable}>
+      <Text style={styles.touchableText}>Btn</Text>
+    </TouchableOpacity>
+  </View>
+);
+const INITIAL_COORDINATES: [number, number][] = [
+  [-73.99155, 40.73581],
+  [-73.99155, 40.73681],
+];
+
+const ShowMarkerView = () => {
+  const [pointList, setPointList] =
+    React.useState<GeoJSON.Position[]>(INITIAL_COORDINATES);
+  const [allowOverlapWithPuck, setAllowOverlapWithPuck] =
+    React.useState<boolean>(false);
+
+  const onPressMap = (e: GeoJSON.Feature) => {
+    const geometry = e.geometry as GeoJSON.Point;
+    setPointList((pl) => [...pl, geometry.coordinates]);
+  };
+
+  return (
+    <>
+      <Button
+        title={
+          allowOverlapWithPuck
+            ? 'allowOverlapWithPuck true'
+            : 'allowOverlapWithPuck false'
+        }
+        onPress={() => setAllowOverlapWithPuck((prev) => !prev)}
+      />
+      <Mapbox.MapView onPress={onPressMap} style={styles.matchParent}>
+        <Mapbox.Camera
+          defaultSettings={{
+            zoomLevel: 16,
+            centerCoordinate: pointList[0],
+          }}
+        />
+
+        <Mapbox.PointAnnotation coordinate={pointList[1]} id="pt-ann">
+          <AnnotationContent title={'this is a point annotation'} />
+        </Mapbox.PointAnnotation>
+
+        <Mapbox.MarkerView
+          coordinate={pointList[0]}
+          allowOverlapWithPuck={allowOverlapWithPuck}
+        >
+          <AnnotationContent title={'this is a marker view'} />
+        </Mapbox.MarkerView>
+
+        {pointList.slice(2).map((coordinate, index) => (
+          <Mapbox.PointAnnotation
+            coordinate={coordinate}
+            id={`pt-ann-${index}`}
+            key={`pt-ann-${index}`}
+          >
+            <AnnotationContent title={'this is a point annotation'} />
+          </Mapbox.PointAnnotation>
+        ))}
+
+        <Mapbox.NativeUserLocation />
+      </Mapbox.MapView>
+
+      <Bubble>
+        <Text>Tap on map to add a point annotation</Text>
+      </Bubble>
+    </>
+  );
+};
+
+export default ShowMarkerView;
+```
+
+```
+Custom Callout
+Use MarkerView to create a custom callout.
+
+import Mapbox, { type SymbolLayerStyle } from '@rnmapbox/maps';
+import { Feature } from '@turf/helpers';
+import React, { useState } from 'react';
+import { StyleProp, Text, TextStyle, View, ViewStyle } from 'react-native';
+
+import exampleIcon from '../../assets/pin.png';
+import sheet from '../../styles/sheet';
+import { ExampleWithMetadata } from '../common/ExampleMetadata'; // exclude-from-doc
+
+const defaultCamera = {
+  centerCoordinate: [12.338, 45.4385],
+  zoomLevel: 17.4,
+};
+
+const featureCollection: GeoJSON.FeatureCollection<GeoJSON.Geometry> = {
+  type: 'FeatureCollection',
+  features: [
+    {
+      type: 'Feature',
+      id: '9d10456e-bdda-4aa9-9269-04c1667d4552',
+      properties: {
+        icon: 'example',
+        message: 'Hello!',
+      },
+      geometry: {
+        type: 'Point',
+        coordinates: [12.338, 45.4385],
+      },
+    },
+  ],
+};
+
+type CustomCalloutViewProps = {
+  message: string;
+};
+
+const CustomCalloutView = ({ message }: CustomCalloutViewProps) => {
+  return (
+    <View style={styles.calloutContainerStyle}>
+      <Text style={styles.customCalloutText}>{message}</Text>
+    </View>
+  );
+};
+
+const CustomCallout = () => {
+  const [selectedFeature, setSelectedFeature] =
+    useState<GeoJSON.Feature<GeoJSON.Point>>();
+
+  const onPinPress = (e: { features: Array<GeoJSON.Feature> }): void => {
+    if (selectedFeature) {
+      setSelectedFeature(undefined);
+      return;
+    }
+
+    const feature = e?.features[0] as Feature<GeoJSON.Point>;
+    setSelectedFeature(feature);
+  };
+
+  return (
+    <Mapbox.MapView style={sheet.matchParent}>
+      <Mapbox.Camera defaultSettings={defaultCamera} />
+      <Mapbox.Images images={{ exampleIcon }} />
+      <Mapbox.ShapeSource
+        id="mapPinsSource"
+        shape={featureCollection}
+        onPress={onPinPress}
+      >
+        <Mapbox.SymbolLayer id="mapPinsLayer" style={styles.mapPinLayer} />
+      </Mapbox.ShapeSource>
+      {selectedFeature && (
+        <Mapbox.MarkerView coordinate={selectedFeature.geometry.coordinates}>
+          <CustomCalloutView message={selectedFeature?.properties?.message} />
+        </Mapbox.MarkerView>
+      )}
+    </Mapbox.MapView>
+  );
+};
+
+const styles: {
+  matchParent: StyleProp<ViewStyle>;
+  mapPinLayer: SymbolLayerStyle;
+  customCalloutText: StyleProp<TextStyle>;
+  calloutContainerStyle: StyleProp<ViewStyle>;
+} = {
+  matchParent: {
+    flex: 1,
+  },
+  mapPinLayer: {
+    iconAllowOverlap: true,
+    iconAnchor: 'bottom',
+    iconSize: 1.0,
+    iconImage: 'exampleIcon',
+  },
+  customCalloutText: {
+    color: 'black',
+    fontSize: 16,
+  },
+  calloutContainerStyle: {
+    backgroundColor: 'white',
+    width: 60,
+    height: 40,
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+};
+
+export default CustomCallout;
+```

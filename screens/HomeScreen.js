@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../firebaseConfig';
-import { get, ref, update } from 'firebase/database';
+import { get, ref, update, onValue, off } from 'firebase/database';
 import Radar from 'react-native-radar';
 import Mapbox, { MapView, LocationPuck } from '@rnmapbox/maps';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -24,7 +24,12 @@ import { SearchBar, ListItem, Divider, Avatar } from '@rneui/themed';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 
-import { getSharingStatus, shareLocation, stopSharingLocation, stopReceivingLocation } from '../sharingUtils';
+import {
+  getSharingStatus,
+  shareLocation,
+  stopSharingLocation,
+  stopReceivingLocation,
+} from '../sharingUtils';
 
 export default function HomeScreen() {
   // ------------------------------
@@ -48,6 +53,9 @@ export default function HomeScreen() {
   const [expanded2, setExpanded2] = useState(true);
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState([]);
+  // New: States for accordions lists (real-time sharing lists)
+  const [sharingWithList, setSharingWithList] = useState([]);
+  const [receivingFromList, setReceivingFromList] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
   const [showSharingDialog, setShowSharingDialog] = useState(false);
   const [sharingStatus, setSharingStatus] = useState({ amSharing: false, amReceiving: false });
@@ -162,6 +170,55 @@ export default function HomeScreen() {
       setSearchResults([]);
     }
   }, [search]);
+
+  // ------------------------------
+  // Real-time Listeners for Sharing Lists
+  // ------------------------------
+  useEffect(() => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
+
+    const sharingWithRef = ref(db, `users/${currentUser.uid}/sharingWith`);
+    const receivingFromRef = ref(db, `users/${currentUser.uid}/receivingFrom`);
+
+    // Listener for "Sharing With" list:
+    const sharingWithListener = onValue(sharingWithRef, async (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        const uids = Object.keys(data);
+        const userPromises = uids.map(async (uid) => {
+          const userSnap = await get(ref(db, `users/${uid}`));
+          return userSnap.exists() ? { uid, ...userSnap.val() } : null;
+        });
+        const users = await Promise.all(userPromises);
+        setSharingWithList(users.filter((u) => u !== null));
+      } else {
+        setSharingWithList([]);
+      }
+    });
+
+    // Listener for "Receiving From" list:
+    const receivingFromListener = onValue(receivingFromRef, async (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        const uids = Object.keys(data);
+        const userPromises = uids.map(async (uid) => {
+          const userSnap = await get(ref(db, `users/${uid}`));
+          return userSnap.exists() ? { uid, ...userSnap.val() } : null;
+        });
+        const users = await Promise.all(userPromises);
+        setReceivingFromList(users.filter((u) => u !== null));
+      } else {
+        setReceivingFromList([]);
+      }
+    });
+
+    // Cleanup the listeners when unmounting:
+    return () => {
+      off(sharingWithRef, 'value', sharingWithListener);
+      off(receivingFromRef, 'value', receivingFromListener);
+    };
+  }, []);
 
   // ------------------------------
   // Validation for Name Fields
@@ -356,6 +413,69 @@ export default function HomeScreen() {
     }
   };
 
+  // ------------------------------
+  // New: Reusable Component for Displaying a User with Sharing Status
+  // ------------------------------
+  const UserListItem = ({ user, onPress }) => {
+    const [statusText, setStatusText] = useState('');
+
+    useEffect(() => {
+      const fetchStatus = async () => {
+        const currentUser = auth.currentUser;
+        if (!currentUser) return;
+        try {
+          const status = await getSharingStatus(currentUser.uid, user.uid);
+          let text = '';
+          if (status.amSharing && status.amReceiving) {
+            text = 'Both of you are sharing';
+          } else if (status.amSharing && !status.amReceiving) {
+            text = 'Receiving your location';
+          } else if (!status.amSharing && status.amReceiving) {
+            text = 'Is sharing with you';
+          } else {
+            text = 'Neither of you are sharing';
+          }
+          setStatusText(text);
+        } catch (err) {
+          console.error(err);
+        }
+      };
+      fetchStatus();
+    }, [user]);
+
+    return (
+      <ListItem bottomDivider onPress={() => onPress(user)}>
+        <Avatar
+          rounded
+          source={
+            user.avatar && user.avatar.link
+              ? { uri: user.avatar.link }
+              : undefined
+          }
+          icon={
+            !user.avatar || !user.avatar.link
+              ? { name: 'person-outline', type: 'material', size: 26 }
+              : undefined
+          }
+          containerStyle={
+            !user.avatar || !user.avatar.link
+              ? { backgroundColor: '#c2c2c2' }
+              : {}
+          }
+        />
+        <ListItem.Content>
+          <ListItem.Title>
+            {(`${user.firstName || ''} ${user.lastName || ''}`).trim()}
+          </ListItem.Title>
+          <ListItem.Subtitle>{statusText}</ListItem.Subtitle>
+        </ListItem.Content>
+      </ListItem>
+    );
+  };
+
+  // ------------------------------
+  // Sharing Dialog (same as before)
+  // ------------------------------
   function SharingDialog({
     targetUser,
     sharingStatus,
@@ -408,7 +528,7 @@ export default function HomeScreen() {
     );
   }
 
-  // Called when a search result is tapped.
+  // Called when a search result or list item is tapped.
   const handleUserPress = async (user) => {
     const currentUser = auth.currentUser;
     if (!currentUser) return;
@@ -570,37 +690,12 @@ export default function HomeScreen() {
               inputStyle={styles.searchInput}
             />
 
-            {/* If there is at least one character in the search field, hide the accordions and show results */}
+            {/* If there is at least one character in the search field, show search results */}
             {search.trim().length > 0 ? (
               <>
                 {searchResults.length > 0 ? (
                   searchResults.map((user) => (
-                    <ListItem bottomDivider key={user.uid} onPress={() => handleUserPress(user)}>
-                      <Avatar
-                        rounded
-                        source={
-                          user.avatar && user.avatar.link
-                            ? { uri: user.avatar.link }
-                            : undefined
-                        }
-                        icon={
-                          !user.avatar || !user.avatar.link
-                            ? { name: 'person-outline', type: 'material', size: 26 }
-                            : undefined
-                        }
-                        containerStyle={
-                          !user.avatar || !user.avatar.link
-                            ? { backgroundColor: '#c2c2c2' }
-                            : {}
-                        }
-                      />
-                      <ListItem.Content>
-                        <ListItem.Title>
-                          {(`${user.firstName || ''} ${user.lastName || ''}`).trim()}
-                        </ListItem.Title>
-                        <ListItem.Subtitle>placeholder</ListItem.Subtitle>
-                      </ListItem.Content>
-                    </ListItem>
+                    <UserListItem key={user.uid} user={user} onPress={handleUserPress} />
                   ))
                 ) : (
                   <Text style={{ textAlign: 'center', marginTop: 20 }}>
@@ -616,15 +711,18 @@ export default function HomeScreen() {
                       <ListItem.Title>Sharing With</ListItem.Title>
                     </ListItem.Content>
                   }
-                  animation="default"
                   isExpanded={expanded1}
                   onPress={() => setExpanded1(!expanded1)}
                 >
-                  <ListItem bottomDivider>
-                    <ListItem.Content>
-                      <ListItem.Title>User 1</ListItem.Title>
-                    </ListItem.Content>
-                  </ListItem>
+                  {sharingWithList.length > 0 ? (
+                    sharingWithList.map((user) => (
+                      <UserListItem key={user.uid} user={user} onPress={handleUserPress} />
+                    ))
+                  ) : (
+                    <Text style={{ margin: 10, textAlign: 'center' }}>
+                      You are not sharing your location yet.
+                    </Text>
+                  )}
                 </ListItem.Accordion>
 
                 <Divider
@@ -643,17 +741,22 @@ export default function HomeScreen() {
                   isExpanded={expanded2}
                   onPress={() => setExpanded2(!expanded2)}
                 >
-                  <ListItem bottomDivider>
-                    <ListItem.Content>
-                      <ListItem.Title>User 2</ListItem.Title>
-                    </ListItem.Content>
-                  </ListItem>
+                  {receivingFromList.length > 0 ? (
+                    receivingFromList.map((user) => (
+                      <UserListItem key={user.uid} user={user} onPress={handleUserPress} />
+                    ))
+                  ) : (
+                    <Text style={{ margin: 10, textAlign: 'center' }}>
+                      Nobody has shared with you yet.
+                    </Text>
+                  )}
                 </ListItem.Accordion>
               </>
             )}
           </ScrollView>
         </SafeAreaView>
       </Modal>
+
       {showSharingDialog && selectedUser && (
         <Modal
           animationType="fade"
@@ -669,7 +772,7 @@ export default function HomeScreen() {
                 sharingStatus={sharingStatus}
                 onShare={async () => {
                   await shareLocation(auth.currentUser.uid, selectedUser.uid);
-                  // Optionally, update sharingStatus if you wish.
+                  // Optionally, update sharingStatus if needed.
                 }}
                 onStopSharing={async () => {
                   await stopSharingLocation(auth.currentUser.uid, selectedUser.uid);
@@ -835,10 +938,8 @@ const dialogStyles = StyleSheet.create({
     padding: 20,
     marginHorizontal: 20,
     width: '80%',
-    // Optionally add shadows/elevation here
   },
 });
-
 
 const SharingStyles = StyleSheet.create({
   dialogContainer: {
@@ -847,7 +948,6 @@ const SharingStyles = StyleSheet.create({
     marginHorizontal: 20,
     borderRadius: 8,
     alignItems: 'center',
-    // You can add shadow/elevation for a nicer look
   },
   dialogMessage: {
     fontSize: 16,
