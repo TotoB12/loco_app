@@ -36,7 +36,7 @@ export default function HomeScreen() {
   const [firstNameError, setFirstNameError] = useState(false);
   const [lastNameError, setLastNameError] = useState(false);
   const [avatarUri, setAvatarUri] = useState(null);
-  const [avatarData, setAvatarData] = useState(null); // NEW: full avatar object from the DB
+  const [avatarData, setAvatarData] = useState(null); // full avatar object from the DB
   const [uploading, setUploading] = useState(false);
 
   // Social (People) modal state
@@ -44,6 +44,7 @@ export default function HomeScreen() {
   const [expanded1, setExpanded1] = useState(false);
   const [expanded2, setExpanded2] = useState(true);
   const [search, setSearch] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
 
   // Set your Imgur client ID here (replace with your actual client ID)
   const IMGUR_CLIENT_ID = '4916641447bc9f6';
@@ -110,6 +111,52 @@ export default function HomeScreen() {
       }
     }
   }, [showSettings]);
+
+  // ------------------------------
+  // Search Users from Realtime Database (excluding self)
+  // ------------------------------
+  useEffect(() => {
+    if (search.trim().length > 0) {
+      const currentUser = auth.currentUser;
+      const usersRef = ref(db, 'users');
+      get(usersRef)
+        .then((snapshot) => {
+          if (snapshot.exists()) {
+            const usersData = snapshot.val();
+            const searchLower = search.toLowerCase();
+            let results = [];
+            for (const uid in usersData) {
+              // Exclude the currently signed-in user
+              if (currentUser && uid === currentUser.uid) {
+                continue;
+              }
+              const user = usersData[uid];
+              const firstName = user.firstName || '';
+              const lastName = user.lastName || '';
+              const email = user.email || '';
+              // Combine first and last name (trim extra spaces)
+              const fullName = (firstName + ' ' + lastName).trim().toLowerCase();
+              // Check if the search term is part of the full name or the email
+              if (
+                fullName.includes(searchLower) ||
+                email.toLowerCase().includes(searchLower)
+              ) {
+                results.push({ uid, ...user });
+              }
+            }
+            setSearchResults(results);
+          } else {
+            setSearchResults([]);
+          }
+        })
+        .catch((err) => {
+          console.error('Error fetching users:', err);
+          setSearchResults([]);
+        });
+    } else {
+      setSearchResults([]);
+    }
+  }, [search]);
 
   // ------------------------------
   // Validation for Name Fields
@@ -185,18 +232,13 @@ export default function HomeScreen() {
   };
 
   const resizeImageIfNeeded = async (uri, width, height) => {
-    // Check if the image already fits within the 1000x1000 limit.
     if (width <= 500 && height <= 500) {
       return uri;
     }
-
-    // Calculate the scale factor to maintain aspect ratio
     const maxDimension = 1000;
     const scaleFactor = Math.min(maxDimension / width, maxDimension / height);
     const newWidth = Math.round(width * scaleFactor);
     const newHeight = Math.round(height * scaleFactor);
-
-    // Use ImageManipulator to resize the image
     const manipResult = await ImageManipulator.manipulateAsync(
       uri,
       [{ resize: { width: newWidth, height: newHeight } }],
@@ -233,13 +275,11 @@ export default function HomeScreen() {
       const result = await response.json();
 
       if (result.success) {
-        // If a previous avatar exists, delete it first
         if (avatarData && avatarData.deletehash) {
           await deleteImgurImage(avatarData.deletehash);
         }
         const currentUser = auth.currentUser;
         if (currentUser) {
-          // Update the user's record with the entire Imgur response data
           await update(ref(db, 'users/' + currentUser.uid), { avatar: result.data });
           setAvatarData(result.data);
           setAvatarUri(result.data.link);
@@ -277,9 +317,7 @@ export default function HomeScreen() {
     });
 
     if (!pickerResult.canceled) {
-      // The picker result includes an assets array; get the first asset.
       const asset = pickerResult.assets[0];
-      // Use the asset's width and height from the picker result
       const resizedUri = await resizeImageIfNeeded(asset.uri, asset.width, asset.height);
       await uploadImage(resizedUri);
     }
@@ -462,45 +500,88 @@ export default function HomeScreen() {
               inputContainerStyle={styles.searchInputContainer}
               inputStyle={styles.searchInput}
             />
-            <ListItem.Accordion
-              content={
-                <ListItem.Content>
-                  <ListItem.Title>Sharing With</ListItem.Title>
-                </ListItem.Content>
-              }
-              animation="default"
-              isExpanded={expanded1}
-              onPress={() => setExpanded1(!expanded1)}
-            >
-              <ListItem bottomDivider>
-                <ListItem.Content>
-                  <ListItem.Title>User 1</ListItem.Title>
-                </ListItem.Content>
-              </ListItem>
-            </ListItem.Accordion>
 
-            <Divider
-              style={{ width: '100%' }}
-              insetType="middle"
-              width={1}
-              orientation="horizontal"
-            />
+            {/* If there is at least one character in the search field, hide the accordions and show results */}
+            {search.trim().length > 0 ? (
+              <>
+                {searchResults.length > 0 ? (
+                  searchResults.map((user) => (
+                    <ListItem bottomDivider key={user.uid}>
+                      <Avatar
+                        rounded
+                        source={
+                          user.avatar && user.avatar.link
+                            ? { uri: user.avatar.link }
+                            : undefined
+                        }
+                        icon={
+                          !user.avatar || !user.avatar.link
+                            ? { name: 'person-outline', type: 'material', size: 26 }
+                            : undefined
+                        }
+                        containerStyle={
+                          !user.avatar || !user.avatar.link
+                            ? { backgroundColor: '#c2c2c2' }
+                            : {}
+                        }
+                      />
+                      <ListItem.Content>
+                        <ListItem.Title>
+                          {(`${user.firstName || ''} ${user.lastName || ''}`).trim()}
+                        </ListItem.Title>
+                        <ListItem.Subtitle>placeholder</ListItem.Subtitle>
+                      </ListItem.Content>
+                    </ListItem>
+                  ))
+                ) : (
+                  <Text style={{ textAlign: 'center', marginTop: 20 }}>
+                    No users found.
+                  </Text>
+                )}
+              </>
+            ) : (
+              <>
+                <ListItem.Accordion
+                  content={
+                    <ListItem.Content>
+                      <ListItem.Title>Sharing With</ListItem.Title>
+                    </ListItem.Content>
+                  }
+                  animation="default"
+                  isExpanded={expanded1}
+                  onPress={() => setExpanded1(!expanded1)}
+                >
+                  <ListItem bottomDivider>
+                    <ListItem.Content>
+                      <ListItem.Title>User 1</ListItem.Title>
+                    </ListItem.Content>
+                  </ListItem>
+                </ListItem.Accordion>
 
-            <ListItem.Accordion
-              content={
-                <ListItem.Content>
-                  <ListItem.Title>Receiving Locations</ListItem.Title>
-                </ListItem.Content>
-              }
-              isExpanded={expanded2}
-              onPress={() => setExpanded2(!expanded2)}
-            >
-              <ListItem bottomDivider>
-                <ListItem.Content>
-                  <ListItem.Title>User 2</ListItem.Title>
-                </ListItem.Content>
-              </ListItem>
-            </ListItem.Accordion>
+                <Divider
+                  style={{ width: '100%' }}
+                  insetType="middle"
+                  width={1}
+                  orientation="horizontal"
+                />
+
+                <ListItem.Accordion
+                  content={
+                    <ListItem.Content>
+                      <ListItem.Title>Receiving Locations</ListItem.Title>
+                    </ListItem.Content>
+                  }
+                  isExpanded={expanded2}
+                  onPress={() => setExpanded2(!expanded2)}
+                >
+                  <ListItem bottomDivider>
+                    <ListItem.Content>
+                      <ListItem.Title>User 2</ListItem.Title>
+                    </ListItem.Content>
+                  </ListItem>
+                </ListItem.Accordion>
+              </>
+            )}
           </ScrollView>
         </SafeAreaView>
       </Modal>
