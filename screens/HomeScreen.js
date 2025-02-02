@@ -6,6 +6,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   Modal,
+  Button,
   TextInput,
   SafeAreaView,
   ScrollView,
@@ -22,6 +23,8 @@ import { FontAwesome5 } from '@expo/vector-icons';
 import { SearchBar, ListItem, Divider, Avatar } from '@rneui/themed';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
+
+import { getSharingStatus, shareLocation, stopSharingLocation, stopReceivingLocation } from '../sharingUtils';
 
 export default function HomeScreen() {
   // ------------------------------
@@ -45,8 +48,10 @@ export default function HomeScreen() {
   const [expanded2, setExpanded2] = useState(true);
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState([]);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [showSharingDialog, setShowSharingDialog] = useState(false);
+  const [sharingStatus, setSharingStatus] = useState({ amSharing: false, amReceiving: false });
 
-  // Set your Imgur client ID here (replace with your actual client ID)
   const IMGUR_CLIENT_ID = '4916641447bc9f6';
 
   // ------------------------------
@@ -351,6 +356,70 @@ export default function HomeScreen() {
     }
   };
 
+  function SharingDialog({
+    targetUser,
+    sharingStatus,
+    onShare,
+    onStopSharing,
+    onStopReceiving,
+    onClose,
+  }) {
+    let message = '';
+    let actions = [];
+
+    if (sharingStatus.amSharing && !sharingStatus.amReceiving) {
+      // Case 1: You are sharing, they are not.
+      message = `You are sharing your location with ${targetUser.firstName}`;
+      actions.push({ title: 'Stop Sharing My Location', onPress: onStopSharing });
+    } else if (!sharingStatus.amSharing && sharingStatus.amReceiving) {
+      // Case 2: They are sharing with you, but you’re not.
+      message = `${targetUser.firstName} is sharing their location`;
+      actions.push({ title: 'Share My Location', onPress: onShare });
+      actions.push({ title: `Remove ${targetUser.firstName}`, onPress: onStopReceiving });
+    } else if (sharingStatus.amSharing && sharingStatus.amReceiving) {
+      // Case 3: Both are sharing.
+      message = 'You are both sharing';
+      actions.push({ title: 'Stop Sharing My Location', onPress: onStopSharing });
+      actions.push({ title: `Remove ${targetUser.firstName}`, onPress: onStopReceiving });
+    } else {
+      // Case 4: Neither are sharing.
+      message = 'Neither of you are sharing';
+      actions.push({ title: 'Share My Location', onPress: onShare });
+    }
+
+    return (
+      <View style={SharingStyles.dialogContainer}>
+        <Text style={SharingStyles.dialogMessage}>{message}</Text>
+        {actions.map((action, index) => (
+          <View key={index} style={SharingStyles.buttonContainer}>
+            <Button
+              title={action.title}
+              onPress={() => {
+                action.onPress();
+                onClose();
+              }}
+            />
+          </View>
+        ))}
+        <View style={SharingStyles.buttonContainer}>
+          <Button title="Cancel" onPress={onClose} />
+        </View>
+      </View>
+    );
+  }
+
+  // Called when a search result is tapped.
+  const handleUserPress = async (user) => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
+
+    // Check sharing status between the current user and the tapped user.
+    const status = await getSharingStatus(currentUser.uid, user.uid);
+    setSharingStatus(status);
+    setSelectedUser(user);
+    setShowSharingDialog(true);
+  };
+
   // ------------------------------
   // Render
   // ------------------------------
@@ -506,7 +575,7 @@ export default function HomeScreen() {
               <>
                 {searchResults.length > 0 ? (
                   searchResults.map((user) => (
-                    <ListItem bottomDivider key={user.uid}>
+                    <ListItem bottomDivider key={user.uid} onPress={() => handleUserPress(user)}>
                       <Avatar
                         rounded
                         source={
@@ -585,6 +654,35 @@ export default function HomeScreen() {
           </ScrollView>
         </SafeAreaView>
       </Modal>
+      {showSharingDialog && selectedUser && (
+        <Modal
+          animationType="fade"
+          transparent={true}
+          visible={showSharingDialog}
+          onBackdropPress={() => setShowSharingDialog(false)}
+          onRequestClose={() => setShowSharingDialog(false)}
+        >
+          <View style={dialogStyles.overlay}>
+            <View style={dialogStyles.dialogBox}>
+              <SharingDialog
+                targetUser={selectedUser}
+                sharingStatus={sharingStatus}
+                onShare={async () => {
+                  await shareLocation(auth.currentUser.uid, selectedUser.uid);
+                  // Optionally, update sharingStatus if you wish.
+                }}
+                onStopSharing={async () => {
+                  await stopSharingLocation(auth.currentUser.uid, selectedUser.uid);
+                }}
+                onStopReceiving={async () => {
+                  await stopReceivingLocation(auth.currentUser.uid, selectedUser.uid);
+                }}
+                onClose={() => setShowSharingDialog(false)}
+              />
+            </View>
+          </View>
+        </Modal>
+      )}
     </View>
   );
 }
@@ -721,5 +819,43 @@ const styles = StyleSheet.create({
   },
   avatarButtonText: {
     color: '#fff',
+  },
+});
+
+const dialogStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dialogBox: {
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 20,
+    marginHorizontal: 20,
+    width: '80%',
+    // Optionally add shadows/elevation here
+  },
+});
+
+
+const SharingStyles = StyleSheet.create({
+  dialogContainer: {
+    backgroundColor: '#fff',
+    padding: 20,
+    marginHorizontal: 20,
+    borderRadius: 8,
+    alignItems: 'center',
+    // You can add shadow/elevation for a nicer look
+  },
+  dialogMessage: {
+    fontSize: 16,
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  buttonContainer: {
+    marginVertical: 5,
+    width: '100%',
   },
 });

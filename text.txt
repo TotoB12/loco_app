@@ -282,6 +282,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   Modal,
+  Button,
   TextInput,
   SafeAreaView,
   ScrollView,
@@ -298,6 +299,8 @@ import { FontAwesome5 } from '@expo/vector-icons';
 import { SearchBar, ListItem, Divider, Avatar } from '@rneui/themed';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
+
+import { getSharingStatus, shareLocation, stopSharingLocation, stopReceivingLocation } from '../sharingUtils';
 
 export default function HomeScreen() {
   // ------------------------------
@@ -321,8 +324,10 @@ export default function HomeScreen() {
   const [expanded2, setExpanded2] = useState(true);
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState([]);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [showSharingDialog, setShowSharingDialog] = useState(false);
+  const [sharingStatus, setSharingStatus] = useState({ amSharing: false, amReceiving: false });
 
-  // Set your Imgur client ID here (replace with your actual client ID)
   const IMGUR_CLIENT_ID = '4916641447bc9f6';
 
   // ------------------------------
@@ -627,6 +632,70 @@ export default function HomeScreen() {
     }
   };
 
+  function SharingDialog({
+    targetUser,
+    sharingStatus,
+    onShare,
+    onStopSharing,
+    onStopReceiving,
+    onClose,
+  }) {
+    let message = '';
+    let actions = [];
+
+    if (sharingStatus.amSharing && !sharingStatus.amReceiving) {
+      // Case 1: You are sharing, they are not.
+      message = `You are sharing your location with ${targetUser.firstName}`;
+      actions.push({ title: 'Stop Sharing My Location', onPress: onStopSharing });
+    } else if (!sharingStatus.amSharing && sharingStatus.amReceiving) {
+      // Case 2: They are sharing with you, but you’re not.
+      message = `${targetUser.firstName} is sharing their location`;
+      actions.push({ title: 'Share My Location', onPress: onShare });
+      actions.push({ title: `Remove ${targetUser.firstName}`, onPress: onStopReceiving });
+    } else if (sharingStatus.amSharing && sharingStatus.amReceiving) {
+      // Case 3: Both are sharing.
+      message = 'You are both sharing';
+      actions.push({ title: 'Stop Sharing My Location', onPress: onStopSharing });
+      actions.push({ title: `Remove ${targetUser.firstName}`, onPress: onStopReceiving });
+    } else {
+      // Case 4: Neither are sharing.
+      message = 'Neither of you are sharing';
+      actions.push({ title: 'Share My Location', onPress: onShare });
+    }
+
+    return (
+      <View style={SharingStyles.dialogContainer}>
+        <Text style={SharingStyles.dialogMessage}>{message}</Text>
+        {actions.map((action, index) => (
+          <View key={index} style={SharingStyles.buttonContainer}>
+            <Button
+              title={action.title}
+              onPress={() => {
+                action.onPress();
+                onClose();
+              }}
+            />
+          </View>
+        ))}
+        <View style={SharingStyles.buttonContainer}>
+          <Button title="Cancel" onPress={onClose} />
+        </View>
+      </View>
+    );
+  }
+
+  // Called when a search result is tapped.
+  const handleUserPress = async (user) => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
+
+    // Check sharing status between the current user and the tapped user.
+    const status = await getSharingStatus(currentUser.uid, user.uid);
+    setSharingStatus(status);
+    setSelectedUser(user);
+    setShowSharingDialog(true);
+  };
+
   // ------------------------------
   // Render
   // ------------------------------
@@ -782,7 +851,7 @@ export default function HomeScreen() {
               <>
                 {searchResults.length > 0 ? (
                   searchResults.map((user) => (
-                    <ListItem bottomDivider key={user.uid}>
+                    <ListItem bottomDivider key={user.uid} onPress={() => handleUserPress(user)}>
                       <Avatar
                         rounded
                         source={
@@ -861,6 +930,35 @@ export default function HomeScreen() {
           </ScrollView>
         </SafeAreaView>
       </Modal>
+      {showSharingDialog && selectedUser && (
+        <Modal
+          animationType="fade"
+          transparent={true}
+          visible={showSharingDialog}
+          onBackdropPress={() => setShowSharingDialog(false)}
+          onRequestClose={() => setShowSharingDialog(false)}
+        >
+          <View style={dialogStyles.overlay}>
+            <View style={dialogStyles.dialogBox}>
+              <SharingDialog
+                targetUser={selectedUser}
+                sharingStatus={sharingStatus}
+                onShare={async () => {
+                  await shareLocation(auth.currentUser.uid, selectedUser.uid);
+                  // Optionally, update sharingStatus if you wish.
+                }}
+                onStopSharing={async () => {
+                  await stopSharingLocation(auth.currentUser.uid, selectedUser.uid);
+                }}
+                onStopReceiving={async () => {
+                  await stopReceivingLocation(auth.currentUser.uid, selectedUser.uid);
+                }}
+                onClose={() => setShowSharingDialog(false)}
+              />
+            </View>
+          </View>
+        </Modal>
+      )}
     </View>
   );
 }
@@ -997,6 +1095,44 @@ const styles = StyleSheet.create({
   },
   avatarButtonText: {
     color: '#fff',
+  },
+});
+
+const dialogStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dialogBox: {
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 20,
+    marginHorizontal: 20,
+    width: '80%',
+    // Optionally add shadows/elevation here
+  },
+});
+
+
+const SharingStyles = StyleSheet.create({
+  dialogContainer: {
+    backgroundColor: '#fff',
+    padding: 20,
+    marginHorizontal: 20,
+    borderRadius: 8,
+    alignItems: 'center',
+    // You can add shadow/elevation for a nicer look
+  },
+  dialogMessage: {
+    fontSize: 16,
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  buttonContainer: {
+    marginVertical: 5,
+    width: '100%',
   },
 });
 ```
@@ -1344,6 +1480,82 @@ const styles = StyleSheet.create({
 });
 ```
 
+sharingUtils.js
+```javascript
+// sharingUtils.js
+import { ref, update, get } from 'firebase/database';
+import { db } from './firebaseConfig';
+
+/**
+ * Returns the sharing status between the current user and a target user.
+ * @param {string} currentUid – Your UID.
+ * @param {string} targetUid – The target user's UID.
+ * @returns {Promise<{amSharing: boolean, amReceiving: boolean}>}
+ */
+export const getSharingStatus = async (currentUid, targetUid) => {
+  try {
+    // Check whether targetUid is in your sharingWith and receivingFrom lists.
+    const sharingWithSnap = await get(ref(db, `users/${currentUid}/sharingWith/${targetUid}`));
+    const receivingFromSnap = await get(ref(db, `users/${currentUid}/receivingFrom/${targetUid}`));
+    return {
+      amSharing: sharingWithSnap.exists(),
+      amReceiving: receivingFromSnap.exists(),
+    };
+  } catch (error) {
+    console.error('Error fetching sharing status:', error);
+    return { amSharing: false, amReceiving: false };
+  }
+};
+
+/**
+ * Begins sharing your location with the target user.
+ */
+export const shareLocation = async (currentUid, targetUid) => {
+  try {
+    const updates = {};
+    // Add targetUid to your sharingWith list…
+    updates[`users/${currentUid}/sharingWith/${targetUid}`] = true;
+    // …and add your uid to the target's receivingFrom list.
+    updates[`users/${targetUid}/receivingFrom/${currentUid}`] = true;
+    await update(ref(db), updates);
+  } catch (error) {
+    console.error('Error sharing location:', error);
+  }
+};
+
+/**
+ * Stops sharing your location with the target user.
+ */
+export const stopSharingLocation = async (currentUid, targetUid) => {
+  try {
+    const updates = {};
+    // Remove targetUid from your sharingWith list…
+    updates[`users/${currentUid}/sharingWith/${targetUid}`] = null;
+    // …and remove your uid from the target's receivingFrom list.
+    updates[`users/${targetUid}/receivingFrom/${currentUid}`] = null;
+    await update(ref(db), updates);
+  } catch (error) {
+    console.error('Error stopping sharing location:', error);
+  }
+};
+
+/**
+ * Stops receiving the target user's location.
+ */
+export const stopReceivingLocation = async (currentUid, targetUid) => {
+  try {
+    const updates = {};
+    // Remove targetUid from your receivingFrom list…
+    updates[`users/${currentUid}/receivingFrom/${targetUid}`] = null;
+    // …and remove your uid from the target's sharingWith list.
+    updates[`users/${targetUid}/sharingWith/${currentUid}`] = null;
+    await update(ref(db), updates);
+  } catch (error) {
+    console.error('Error stopping receiving location:', error);
+  }
+};
+```
+
 firebaseConfig.js
 ```javascript
 // firebaseConfig.js
@@ -1517,11 +1729,12 @@ export default ({ config }) => {
 };
 ```
 
-This all works well, but I want to start to implement the actual location sharing feature. When a user search result it clicked on in the People modal, I want a multi-action dialog to show. This dialogue can show a text and different buttons depending on the current sharing situation:
+This all works well, but I want to keep implementing the location sharing features. On the People modal, in the search results, I want the placeholder text to be replaced with one of four different texts (similar to the sharing modal):
 
-- if I am sharing my location with them, but they aren't; the text should be "You are sharing your location with {their first name}", and show button "Stop Sharing My Location"
-- if they are sharing their location with me, but I am not; the text should be "{their first name} is sharing their location with you", and show buttons "Stop Receiving Their Location" and "Share My Location"
-- if both of us are sharing each other's location; the text should be "You are both sharing", and show buttons "Stop Sharing My Location" and "Stop Receiving Their Location"
-- if neither of us are sharing our location with each other; the text should be "Neither of you are sharing", and show button "Share My Location"
+"Is sharing with you"
+"Receiving your location"
+"Neither of you are sharing"
+"Both of you are sharing"
 
-But before all of this, I need my app to have a full and flawless data structure for the Realtime Database: I need the database to be able to keep track of you is sharing with who. I want you to fully develop and implement this architecture and code.
+Then, I want the two "Sharing With" and "Receiving Locations" accordions to actually show a list of the users that I am sharing my location with, and receiving locations from. If none, show a "You are not sharing your location yet" and "Nobody has shared with you yet". These user's should be displayed the exact same way as the search results, and have the same action when clicked on.
+I want you to fully develop and implement this.
