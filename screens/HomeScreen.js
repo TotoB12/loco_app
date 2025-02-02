@@ -12,12 +12,13 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../firebaseConfig';
 import { get, ref, update, onValue, off } from 'firebase/database';
 import Radar from 'react-native-radar';
-import Mapbox, { MapView, LocationPuck } from '@rnmapbox/maps';
+import Mapbox, { MapView, LocationPuck, MarkerView } from '@rnmapbox/maps';
 import { MaterialIcons } from '@expo/vector-icons';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { SearchBar, ListItem, Divider, Avatar } from '@rneui/themed';
@@ -30,6 +31,71 @@ import {
   stopSharingLocation,
   stopReceivingLocation,
 } from '../sharingUtils';
+
+// ---------------------------------------------------------------------
+// New: UserMarker component for displaying a sharing user’s marker
+// ---------------------------------------------------------------------
+const UserMarker = ({ user }) => {
+  return (
+    <View style={markerStyles.container}>
+      <Avatar
+        rounded
+        source={
+          user.avatar && user.avatar.link
+            ? { uri: user.avatar.link }
+            : undefined
+        }
+        icon={
+          !user.avatar || !user.avatar.link
+            ? { name: 'person-outline', type: 'material', size: 24 }
+            : undefined
+        }
+        size={30}
+        containerStyle={
+          !user.avatar || !user.avatar.link
+            ? { backgroundColor: '#c2c2c2' }
+            : {}
+        }
+      />
+      <Text style={markerStyles.nameText}>{user.firstName}</Text>
+    </View>
+  );
+};
+
+const markerStyles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    padding: 5,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'gray',
+  },
+  avatar: {
+    width: 30,
+    height: 30,
+    borderRadius: 20,
+  },
+  defaultAvatar: {
+    width: 20,
+    height: 20,
+    borderRadius: 20,
+    backgroundColor: '#c2c2c2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  defaultAvatarText: {
+    color: 'white',
+    fontWeight: 'bold',
+  },
+  nameText: {
+    color: 'black',
+    marginLeft: 5,
+    fontSize: 16,
+  },
+});
+// ---------------------------------------------------------------------
 
 export default function HomeScreen() {
   // ------------------------------
@@ -53,12 +119,15 @@ export default function HomeScreen() {
   const [expanded2, setExpanded2] = useState(true);
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState([]);
-  // New: States for accordions lists (real-time sharing lists)
+  // Sharing lists from Realtime Database
   const [sharingWithList, setSharingWithList] = useState([]);
   const [receivingFromList, setReceivingFromList] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
   const [showSharingDialog, setShowSharingDialog] = useState(false);
   const [sharingStatus, setSharingStatus] = useState({ amSharing: false, amReceiving: false });
+
+  // NEW: Markers state – keyed by sharing user uid, with latest location & profile info
+  const [markers, setMarkers] = useState({});
 
   const IMGUR_CLIENT_ID = '4916641447bc9f6';
 
@@ -219,6 +288,50 @@ export default function HomeScreen() {
       off(receivingFromRef, 'value', receivingFromListener);
     };
   }, []);
+
+  // ------------------------------
+  // NEW: Setup realtime listeners for location updates for each user sharing with you.
+  // This effect attaches a listener on each user in receivingFromList so that when their
+  // "location" field changes in the DB, we update the markers state.
+  // ------------------------------
+  useEffect(() => {
+    const listeners = {};
+    if (receivingFromList.length > 0) {
+      receivingFromList.forEach((user) => {
+        const userRef = ref(db, `users/${user.uid}`);
+        const callback = (snapshot) => {
+          console.log('Location update for', user.uid);
+          const userData = snapshot.val();
+          if (userData && userData.location) {
+            setMarkers((prev) => ({
+              ...prev,
+              [user.uid]: {
+                ...userData,
+                location: userData.location, // Expecting { latitude, longitude }
+              },
+            }));
+          } else {
+            setMarkers((prev) => {
+              const newMarkers = { ...prev };
+              delete newMarkers[user.uid];
+              return newMarkers;
+            });
+          }
+        };
+        onValue(userRef, callback);
+        listeners[user.uid] = { ref: userRef, callback };
+      });
+    } else {
+      // No users are sharing with you—clear any markers.
+      setMarkers({});
+    }
+    return () => {
+      // Cleanup all listeners attached for each sharing user.
+      Object.values(listeners).forEach(({ ref: r, callback }) => {
+        off(r, 'value', callback);
+      });
+    };
+  }, [receivingFromList]);
 
   // ------------------------------
   // Validation for Name Fields
@@ -567,6 +680,25 @@ export default function HomeScreen() {
             radius: 50.0,
           }}
         />
+
+        {/* NEW: Render markers for each user sharing their location with you */}
+        {Object.keys(markers).map((uid) => {
+          const markerData = markers[uid];
+          if (!markerData.location) return null;
+          return (
+            <MarkerView
+              key={uid}
+              id={uid}
+              coordinate={[
+                markerData.location.longitude,
+                markerData.location.latitude,
+              ]}
+              allowOverlapWithPuck={true}
+            >
+              <UserMarker user={markerData} />
+            </MarkerView>
+          );
+        })}
       </MapView>
 
       {/* Top row with Settings (left) and Friends (right) buttons */}

@@ -97,7 +97,7 @@ export default function App() {
 
     // Listen for location updates
     Radar.on('location', async (result) => {
-      console.log('Radar location event =>', result);
+      // console.log('Radar location event =>', result);
 
       // If user is logged in, push location to Realtime Database
       const currentUser = auth.currentUser;

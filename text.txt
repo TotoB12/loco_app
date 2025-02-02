@@ -1829,7 +1829,7 @@ export default ({ config }) => {
 };
 ```
 
-This all works well, but I want to keep implementing the location sharing features. On the Home screen, I now want the map to display the user's that are sharing their location with me. Each user should be shown with their avatar (picture or icon as per usual), along with their first name on the right side (in black). These pucks/markers should move in real time as the updates come in. I want you to fully develop and implement this. Here is some documentation to help:
+This all works well, but I want to keep implementing the location sharing features. On the Home screen, I now want the map to display the user's that are sharing their location with me. Each user should be shown with their avatar (the picture from the database, or the avatar using the icon, like in the People modal), along with their first name on the right side (in black). These pucks/markers should move in real time as the updates come in. I want you to fully develop and implement this. Here is some documentation to help:
 
 ```
 Marker View
@@ -1934,116 +1934,59 @@ const ShowMarkerView = () => {
 export default ShowMarkerView;
 ```
 
-```
-Custom Callout
-Use MarkerView to create a custom callout.
+Here is also exactly what I want the markers to look like:
 
-import Mapbox, { type SymbolLayerStyle } from '@rnmapbox/maps';
-import { Feature } from '@turf/helpers';
-import React, { useState } from 'react';
-import { StyleProp, Text, TextStyle, View, ViewStyle } from 'react-native';
-
-import exampleIcon from '../../assets/pin.png';
-import sheet from '../../styles/sheet';
-import { ExampleWithMetadata } from '../common/ExampleMetadata'; // exclude-from-doc
-
-const defaultCamera = {
-  centerCoordinate: [12.338, 45.4385],
-  zoomLevel: 17.4,
-};
-
-const featureCollection: GeoJSON.FeatureCollection<GeoJSON.Geometry> = {
-  type: 'FeatureCollection',
-  features: [
-    {
-      type: 'Feature',
-      id: '9d10456e-bdda-4aa9-9269-04c1667d4552',
-      properties: {
-        icon: 'example',
-        message: 'Hello!',
-      },
-      geometry: {
-        type: 'Point',
-        coordinates: [12.338, 45.4385],
-      },
-    },
-  ],
-};
-
-type CustomCalloutViewProps = {
-  message: string;
-};
-
-const CustomCalloutView = ({ message }: CustomCalloutViewProps) => {
+```javascript
+const UserMarker = ({ user }) => {
   return (
-    <View style={styles.calloutContainerStyle}>
-      <Text style={styles.customCalloutText}>{message}</Text>
+    <View style={markerStyles.container}>
+      {user.avatar && user.avatar.link ? (
+        <Image source={{ uri: user.avatar.link }} style={markerStyles.avatar} />
+      ) : (
+        <View style={markerStyles.defaultAvatar}>
+          <Text style={markerStyles.defaultAvatarText}>
+            {user.firstName ? user.firstName.charAt(0) : "?"}
+          </Text>
+        </View>
+      )}
+      <Text style={markerStyles.nameText}>{user.firstName}</Text>
     </View>
   );
 };
 
-const CustomCallout = () => {
-  const [selectedFeature, setSelectedFeature] =
-    useState<GeoJSON.Feature<GeoJSON.Point>>();
-
-  const onPinPress = (e: { features: Array<GeoJSON.Feature> }): void => {
-    if (selectedFeature) {
-      setSelectedFeature(undefined);
-      return;
-    }
-
-    const feature = e?.features[0] as Feature<GeoJSON.Point>;
-    setSelectedFeature(feature);
-  };
-
-  return (
-    <Mapbox.MapView style={sheet.matchParent}>
-      <Mapbox.Camera defaultSettings={defaultCamera} />
-      <Mapbox.Images images={{ exampleIcon }} />
-      <Mapbox.ShapeSource
-        id="mapPinsSource"
-        shape={featureCollection}
-        onPress={onPinPress}
-      >
-        <Mapbox.SymbolLayer id="mapPinsLayer" style={styles.mapPinLayer} />
-      </Mapbox.ShapeSource>
-      {selectedFeature && (
-        <Mapbox.MarkerView coordinate={selectedFeature.geometry.coordinates}>
-          <CustomCalloutView message={selectedFeature?.properties?.message} />
-        </Mapbox.MarkerView>
-      )}
-    </Mapbox.MapView>
-  );
-};
-
-const styles: {
-  matchParent: StyleProp<ViewStyle>;
-  mapPinLayer: SymbolLayerStyle;
-  customCalloutText: StyleProp<TextStyle>;
-  calloutContainerStyle: StyleProp<ViewStyle>;
-} = {
-  matchParent: {
-    flex: 1,
+const markerStyles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'white',
+    padding: 5,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'gray',
   },
-  mapPinLayer: {
-    iconAllowOverlap: true,
-    iconAnchor: 'bottom',
-    iconSize: 1.0,
-    iconImage: 'exampleIcon',
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
   },
-  customCalloutText: {
+  defaultAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#c2c2c2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  defaultAvatarText: {
+    color: 'white',
+    fontWeight: 'bold',
+  },
+  nameText: {
     color: 'black',
+    marginLeft: 5,
     fontSize: 16,
   },
-  calloutContainerStyle: {
-    backgroundColor: 'white',
-    width: 60,
-    height: 40,
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-};
-
-export default CustomCallout;
+});
 ```
+
+Give me the full new `HomeScreen.js` script.
