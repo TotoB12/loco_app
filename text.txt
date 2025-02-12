@@ -2085,11 +2085,4 @@ app.listen(PORT, () => {
 });
 ```
 
-This setup works, but I want to make a full color palette and color scheme overhaul. I have made the following pallete:
-
-Main: White #F8F1F1
-Second: Blue #11698E
-Other: Navy #19456B
-Other: Green #16C79A
-
-I want you to fully develop and implement this. All white background and pages should use the main white, all button icons should use the blue. Whent eh location tracking button is toggled on, the button itself should turn that into that blue and te icon should turn into the main white.
+This setup works, but 
