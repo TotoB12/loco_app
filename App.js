@@ -95,25 +95,6 @@ export default function App() {
     Radar.initialize('prj_live_pk_2bb1459eda8faeaf64aa70990ca689ee231f5b42');
     Radar.setLogLevel('debug'); // Remove or set to 'none' in production
 
-    // Listen for location updates
-    Radar.on('location', async (result) => {
-      // console.log('Radar location event =>', result);
-
-      // If user is logged in, push location to Realtime Database
-      const currentUser = auth.currentUser;
-      if (currentUser && result.location) {
-        const userRef = ref(db, 'users/' + currentUser.uid);
-        await update(userRef, {
-          location: {
-            latitude: result.location.latitude,
-            longitude: result.location.longitude,
-          },
-          // Using the Realtime Database server timestamp sentinel:
-          locationTimestamp: { ".sv": "timestamp" },
-        });
-      }
-    });
-
     Radar.on('error', (err) => {
       console.error('Radar error =>', err);
     });
@@ -161,20 +142,47 @@ export default function App() {
             importance: 2,
           });
 
-          Radar.startTrackingCustom({
-            desiredStoppedUpdateInterval: 60, // every 60s when "stopped"
-            fastestStoppedUpdateInterval: 60,
-            desiredMovingUpdateInterval: 60,  // every 60s when "moving"
-            fastestMovingUpdateInterval: 30,  // won't go faster than 30s
-            desiredSyncInterval: 20,          // sync to Radar server every 20s
-            desiredAccuracy: 'high',
-            stopDuration: 140,                // how long before considered "stopped"
-            stopDistance: 70,                 // how far to move before "moving"
-            replay: 'none',                   // do not replay offline updates
-            sync: 'all',                      // sync all location updates
-            useStoppedGeofence: false,
-            showBlueBar: false,               // iOS: if true, user sees blue bar
-            foregroundServiceEnabled: true,   // Android: show a persistent notif
+          // Radar.startTrackingCustom({
+          //   desiredStoppedUpdateInterval: 60, // every 60s when "stopped"
+          //   fastestStoppedUpdateInterval: 60,
+          //   desiredMovingUpdateInterval: 60,  // every 60s when "moving"
+          //   fastestMovingUpdateInterval: 30,  // won't go faster than 30s
+          //   desiredSyncInterval: 20,          // sync to Radar server every 20s
+          //   desiredAccuracy: 'high',
+          //   stopDuration: 140,                // how long before considered "stopped"
+          //   stopDistance: 70,                 // how far to move before "moving"
+          //   replay: 'none',                   // do not replay offline updates
+          //   sync: 'all',                      // sync all location updates
+          //   useStoppedGeofence: false,
+          //   showBlueBar: false,               // iOS: if true, user sees blue bar
+          //   foregroundServiceEnabled: true,   // Android: show a persistent notif
+          // });
+
+          Radar.startTrip({
+            tripOptions: {
+              externalId: currentUser.uid,
+              // mode: 'car'
+            },
+            trackingOptions: {
+              desiredStoppedUpdateInterval: 60,
+              fastestStoppedUpdateInterval: 60,
+              desiredMovingUpdateInterval: 60,
+              fastestMovingUpdateInterval: 30,
+              desiredSyncInterval: 20,
+              desiredAccuracy: "high",
+              stopDuration: 140,
+              stopDistance: 140,
+              replay: "none",
+              sync: "all",
+              useStoppedGeofence: false,
+              showBlueBar: false,
+              syncGeofences: false,
+              syncGeofencesLimit: 0,
+              beacons: false,
+              foregroundServiceEnabled: true
+            }
+          }).then((result) => {
+            console.log('Radar trip started =>', result);
           });
         }
       } else {

@@ -1,5 +1,5 @@
-I am developing a simple mobile application that allows people to share their live location with others. I am currently trying to develop the part of it that will send regular location updates to the Firestone Database, and have it be fully functional on Android and iOS. I have it coded it in Native Expo React.
-I want to have my app work as efficiently as possible, with great accuracy and low battery usage. Ideally, I want my app to have a background task that runs whenever the app is closed, sending the user's current location to their user item in the database. I am currently using Radar Labs' package to configure and setup location updates. I want to replicate the services of other apps like Google Maps sharing or WhatsApp sharing, but better. The best would be to have my app send a location update every minute. The database should hold the latest position as part of the user item, along with the timestamp.
+I am developing a simple mobile application that allows people to share their live location with others. I am currently trying to develop the part of it that will send regular location updates to the Firestone Database, and have it be fully functional on Android and iOS. I have it coded it in Native Expo React. When Radar detects a new location in the trip, it triggers a Webhook that calls my server.
+I want to have my app work as efficiently as possible, with great accuracy and low battery usage. I am currently using Radar Labs' package to configure and setup location updates. I want to replicate the services of other apps like Google Maps sharing or WhatsApp sharing, but better.
 
 Here is the current setup.
 
@@ -10,8 +10,9 @@ import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { onAuthStateChanged } from 'firebase/auth';
+import { ref, update } from 'firebase/database';
+
 import { auth, db } from './firebaseConfig';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import Radar from 'react-native-radar';
 
 import * as Location from 'expo-location';
@@ -19,7 +20,7 @@ import * as IntentLauncher from 'expo-intent-launcher';
 import { Linking, Platform } from 'react-native';
 
 // Screens
-import PermissionScreen from './screens/PermissionScreen'; // We'll define a new one below
+import PermissionScreen from './screens/PermissionScreen';
 import LoadingScreen from './screens/LoadingScreen';
 import LoginScreen from './screens/LoginScreen';
 import SignupScreen from './screens/SignupScreen';
@@ -101,27 +102,6 @@ export default function App() {
     Radar.initialize('prj_live_pk_2bb1459eda8faeaf64aa70990ca689ee231f5b42');
     Radar.setLogLevel('debug'); // Remove or set to 'none' in production
 
-    // Listen for location updates
-    Radar.on('location', async (result) => {
-      console.log('Radar location event =>', result);
-
-      // If user is logged in, push location to Firestore
-      const currentUser = auth.currentUser;
-      if (currentUser && result.location) {
-        await setDoc(
-          doc(db, 'users', currentUser.uid),
-          {
-            location: {
-              latitude: result.location.latitude,
-              longitude: result.location.longitude,
-            },
-            locationTimestamp: serverTimestamp(),
-          },
-          { merge: true }
-        );
-      }
-    });
-
     Radar.on('error', (err) => {
       console.error('Radar error =>', err);
     });
@@ -169,20 +149,47 @@ export default function App() {
             importance: 2,
           });
 
-          Radar.startTrackingCustom({
-            desiredStoppedUpdateInterval: 60, // every 60s when "stopped"
-            fastestStoppedUpdateInterval: 60,
-            desiredMovingUpdateInterval: 60,  // every 60s when "moving"
-            fastestMovingUpdateInterval: 30,  // won't go faster than 30s
-            desiredSyncInterval: 20,          // sync to Radar server every 20s
-            desiredAccuracy: 'high',
-            stopDuration: 140,                // how long before considered "stopped"
-            stopDistance: 70,                 // how far to move before "moving"
-            replay: 'none',                   // do not replay offline updates
-            sync: 'all',                      // sync all location updates
-            useStoppedGeofence: false,
-            showBlueBar: false,               // iOS: if true, user sees blue bar
-            foregroundServiceEnabled: true,   // Android: show a persistent notif
+          // Radar.startTrackingCustom({
+          //   desiredStoppedUpdateInterval: 60, // every 60s when "stopped"
+          //   fastestStoppedUpdateInterval: 60,
+          //   desiredMovingUpdateInterval: 60,  // every 60s when "moving"
+          //   fastestMovingUpdateInterval: 30,  // won't go faster than 30s
+          //   desiredSyncInterval: 20,          // sync to Radar server every 20s
+          //   desiredAccuracy: 'high',
+          //   stopDuration: 140,                // how long before considered "stopped"
+          //   stopDistance: 70,                 // how far to move before "moving"
+          //   replay: 'none',                   // do not replay offline updates
+          //   sync: 'all',                      // sync all location updates
+          //   useStoppedGeofence: false,
+          //   showBlueBar: false,               // iOS: if true, user sees blue bar
+          //   foregroundServiceEnabled: true,   // Android: show a persistent notif
+          // });
+
+          Radar.startTrip({
+            tripOptions: {
+              externalId: currentUser.uid,
+              // mode: 'car'
+            },
+            trackingOptions: {
+              desiredStoppedUpdateInterval: 60,
+              fastestStoppedUpdateInterval: 60,
+              desiredMovingUpdateInterval: 60,
+              fastestMovingUpdateInterval: 30,
+              desiredSyncInterval: 20,
+              desiredAccuracy: "high",
+              stopDuration: 140,
+              stopDistance: 140,
+              replay: "none",
+              sync: "all",
+              useStoppedGeofence: false,
+              showBlueBar: false,
+              syncGeofences: false,
+              syncGeofencesLimit: 0,
+              beacons: false,
+              foregroundServiceEnabled: true
+            }
+          }).then((result) => {
+            console.log('Radar trip started =>', result);
           });
         }
       } else {
@@ -275,7 +282,7 @@ function PermissionBlockedScreen({ errorMessage, onOpenSettings }) {
 screens/HomeScreen.js
 ```javascript
 // screens/HomeScreen.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -287,20 +294,22 @@ import {
   SafeAreaView,
   ScrollView,
   Alert,
-  ActivityIndicator,
-  Image,
+  ActivityIndicator
 } from 'react-native';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../firebaseConfig';
 import { get, ref, update, onValue, off } from 'firebase/database';
 import Radar from 'react-native-radar';
-import Mapbox, { MapView, LocationPuck, MarkerView } from '@rnmapbox/maps';
+import Mapbox, { MapView, LocationPuck, MarkerView, Camera, UserTrackingMode } from '@rnmapbox/maps';
 import { MaterialIcons } from '@expo/vector-icons';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { SearchBar, ListItem, Divider, Avatar } from '@rneui/themed';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
+import BottomSheet, { BottomSheetScrollView, BottomSheetModal, BottomSheetModalProvider, BottomSheetView } from '@gorhom/bottom-sheet';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
+// Sharing utilities
 import {
   getSharingStatus,
   shareLocation,
@@ -310,31 +319,34 @@ import {
 
 // ---------------------------------------------------------------------
 // New: UserMarker component for displaying a sharing user’s marker
+// (Now wrapped in a TouchableOpacity to handle presses)
 // ---------------------------------------------------------------------
-const UserMarker = ({ user }) => {
+const UserMarker = ({ user, onPress }) => {
   return (
-    <View style={markerStyles.container}>
-      <Avatar
-        rounded
-        source={
-          user.avatar && user.avatar.link
-            ? { uri: user.avatar.link }
-            : undefined
-        }
-        icon={
-          !user.avatar || !user.avatar.link
-            ? { name: 'person-outline', type: 'material', size: 24 }
-            : undefined
-        }
-        size={30}
-        containerStyle={
-          !user.avatar || !user.avatar.link
-            ? { backgroundColor: '#c2c2c2' }
-            : {}
-        }
-      />
-      <Text style={markerStyles.nameText}>{user.firstName}</Text>
-    </View>
+    <TouchableOpacity activeOpacity={0.8} onPress={onPress}>
+      <View style={markerStyles.container}>
+        <Avatar
+          rounded
+          source={
+            user.avatar && user.avatar.link
+              ? { uri: user.avatar.link }
+              : { uri: "data:image/png" }
+          }
+          icon={
+            !user.avatar || !user.avatar.link
+              ? { name: 'person-outline', type: 'material', size: 24 }
+              : undefined
+          }
+          size={30}
+          containerStyle={
+            !user.avatar || !user.avatar.link
+              ? { backgroundColor: '#c2c2c2' }
+              : {}
+          }
+        />
+        <Text style={markerStyles.nameText}>{user.firstName}</Text>
+      </View>
+    </TouchableOpacity>
   );
 };
 
@@ -371,13 +383,138 @@ const markerStyles = StyleSheet.create({
     fontSize: 16,
   },
 });
-// ---------------------------------------------------------------------
+
+/**
+ * Given a timestamp (in milliseconds), returns a human-readable
+ * string like "1 min. ago", "3 days ago", etc.
+ */
+function getTimeAgo(timestamp) {
+  const now = Date.now();
+  const diffInSeconds = Math.floor((now - timestamp) / 1000);
+  if (diffInSeconds < 60) return `${diffInSeconds} sec. ago`;
+  const diffInMinutes = Math.floor(diffInSeconds / 60);
+  if (diffInMinutes < 60) return `${diffInMinutes} min. ago`;
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  if (diffInHours < 24) return `${diffInHours} hr. ago`;
+  const diffInDays = Math.floor(diffInHours / 24);
+  if (diffInDays < 7) return `${diffInDays} day${diffInDays > 1 ? 's' : ''} ago`;
+  const diffInWeeks = Math.floor(diffInDays / 7);
+  if (diffInWeeks < 52) return `${diffInWeeks} week${diffInWeeks > 1 ? 's' : ''} ago`;
+  const diffInYears = Math.floor(diffInWeeks / 52);
+  return `${diffInYears} year${diffInYears > 1 ? 's' : ''} ago`;
+}
+
+/**
+ * Returns the distance in miles between two lat/lon points.
+ */
+function getDistanceFromLatLonInMiles(lat1, lon1, lat2, lon2) {
+  const R = 3958.8; // Earth radius in miles
+  const deg2rad = (deg) => deg * (Math.PI / 180);
+  const dLat = deg2rad(lat2 - lat1);
+  const dLon = deg2rad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(deg2rad(lat1)) *
+    Math.cos(deg2rad(lat2)) *
+    Math.sin(dLon / 2) *
+    Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+// --- New Component: LiveTimeAgo ---
+const LiveTimeAgo = ({ timestamp }) => {
+  const [timeAgo, setTimeAgo] = useState(getTimeAgo(timestamp));
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTimeAgo(getTimeAgo(timestamp));
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [timestamp]);
+
+  return <Text>{timeAgo}</Text>;
+};
+
+// --- New Component: LiveDistance ---
+const LiveDistance = ({ currentLocation, userLocation }) => {
+  const [distanceText, setDistanceText] = useState("");
+
+  useEffect(() => {
+    const calculateDistance = () => {
+      if (currentLocation && userLocation) {
+        const distance = getDistanceFromLatLonInMiles(
+          currentLocation.latitude,
+          currentLocation.longitude,
+          userLocation.latitude,
+          userLocation.longitude
+        );
+        setDistanceText(distance.toFixed(1).toLocaleString('en-US') + ' mi');
+      } else {
+        setDistanceText("");
+      }
+    };
+    calculateDistance();
+    const interval = setInterval(calculateDistance, 2000);
+    return () => clearInterval(interval);
+  }, [currentLocation, userLocation]);
+
+  return <Text style={styles.distanceText}>{distanceText}</Text>;
+};
+
+// --- Updated BottomSheetUserItem ---
+const BottomSheetUserItem = ({ user, currentLocation, onPress }) => {
+  return (
+    <ListItem
+      bottomDivider
+      containerStyle={{ backgroundColor: 'transparent' }}
+      onPress={onPress}
+    >
+      <Avatar
+        rounded
+        source={
+          user.avatar && user.avatar.link
+            ? { uri: user.avatar.link }
+            : { uri: "data:image/png" }
+        }
+        icon={
+          !user.avatar || !user.avatar.link
+            ? { name: 'person-outline', type: 'material', size: 24 }
+            : undefined
+        }
+        size={30}
+        containerStyle={
+          !user.avatar || !user.avatar.link
+            ? { backgroundColor: '#c2c2c2' }
+            : {}
+        }
+      />
+      <ListItem.Content>
+        <View style={styles.userItemHeader}>
+          <ListItem.Title>
+            {(`${user.firstName || ''} ${user.lastName || ''}`).trim()}
+          </ListItem.Title>
+          <LiveDistance currentLocation={currentLocation} userLocation={user.location} />
+        </View>
+        <ListItem.Subtitle>
+          <LiveTimeAgo timestamp={user.locationTimestamp} />
+        </ListItem.Subtitle>
+      </ListItem.Content>
+    </ListItem>
+  );
+};
 
 export default function HomeScreen() {
   // ------------------------------
   // State variables
   // ------------------------------
   const [currentLocation, setCurrentLocation] = useState(null);
+
+  // Ref for the Mapbox.Camera component
+  const cameraRef = useRef(null);
+  // Ref to ensure we center on the user’s location only once
+  const initialCameraCentered = useRef(false);
+  const [tracking, setTracking] = useState(false);
 
   // Settings modal state
   const [showSettings, setShowSettings] = useState(false);
@@ -386,7 +523,7 @@ export default function HomeScreen() {
   const [firstNameError, setFirstNameError] = useState(false);
   const [lastNameError, setLastNameError] = useState(false);
   const [avatarUri, setAvatarUri] = useState(null);
-  const [avatarData, setAvatarData] = useState(null); // full avatar object from the DB
+  const [avatarData, setAvatarData] = useState(null);
   const [uploading, setUploading] = useState(false);
 
   // Social (People) modal state
@@ -395,15 +532,21 @@ export default function HomeScreen() {
   const [expanded2, setExpanded2] = useState(true);
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState([]);
-  // Sharing lists from Realtime Database
   const [sharingWithList, setSharingWithList] = useState([]);
   const [receivingFromList, setReceivingFromList] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
   const [showSharingDialog, setShowSharingDialog] = useState(false);
   const [sharingStatus, setSharingStatus] = useState({ amSharing: false, amReceiving: false });
 
-  // NEW: Markers state – keyed by sharing user uid, with latest location & profile info
+  // Markers state – keyed by sharing user uid
   const [markers, setMarkers] = useState({});
+
+  // New: Selected User Info for Bottom Sheet Modal (for viewing a user’s details)
+  const [selectedUserInfo, setSelectedUserInfo] = useState(null);
+  // New: The reverse–geocoded location (e.g. “Sens Cathedral, …”) for the selected user
+  const [selectedUserLocationName, setSelectedUserLocationName] = useState("");
+  // New: Sharing status for the selected user (amSharing: whether you’re sharing your location with them; amReceiving: whether they’re sharing with you)
+  const [userSharingStatus, setUserSharingStatus] = useState({ amSharing: false, amReceiving: false });
 
   const IMGUR_CLIENT_ID = '4916641447bc9f6';
 
@@ -421,8 +564,7 @@ export default function HomeScreen() {
   // Radar foreground tracking
   // ------------------------------
   useEffect(() => {
-    // Track location once every 10 seconds when in foreground
-    const intervalId = setInterval(() => {
+    const trackLocation = () => {
       Radar.trackOnce({ desiredAccuracy: 'high' })
         .then((result) => {
           if (result.location) {
@@ -432,15 +574,27 @@ export default function HomeScreen() {
         .catch((err) => {
           console.log('Radar trackOnce error =>', err);
         });
-    }, 10000);
+    };
 
+    trackLocation();
+    const intervalId = setInterval(trackLocation, 10000);
     return () => clearInterval(intervalId);
   }, []);
 
+  useEffect(() => {
+    if (currentLocation && !initialCameraCentered.current) {
+      cameraRef.current?.setCamera({
+        centerCoordinate: [currentLocation.longitude, currentLocation.latitude],
+        zoomLevel: 16,
+        animationMode: 'none',
+        animationDuration: 0,
+      });
+      initialCameraCentered.current = true;
+    }
+  }, [currentLocation]);
+
   // ------------------------------
-  // When Settings modal opens:
-  //   - Reset error states
-  //   - Fetch current profile data from the DB
+  // When Settings modal opens: reset errors and fetch current profile data
   // ------------------------------
   useEffect(() => {
     if (showSettings) {
@@ -484,17 +638,12 @@ export default function HomeScreen() {
             const searchLower = search.toLowerCase();
             let results = [];
             for (const uid in usersData) {
-              // Exclude the currently signed-in user
-              if (currentUser && uid === currentUser.uid) {
-                continue;
-              }
+              if (currentUser && uid === currentUser.uid) continue;
               const user = usersData[uid];
               const firstName = user.firstName || '';
               const lastName = user.lastName || '';
               const email = user.email || '';
-              // Combine first and last name (trim extra spaces)
               const fullName = (firstName + ' ' + lastName).trim().toLowerCase();
-              // Check if the search term is part of the full name or the email
               if (
                 fullName.includes(searchLower) ||
                 email.toLowerCase().includes(searchLower)
@@ -558,7 +707,6 @@ export default function HomeScreen() {
       }
     });
 
-    // Cleanup the listeners when unmounting:
     return () => {
       off(sharingWithRef, 'value', sharingWithListener);
       off(receivingFromRef, 'value', receivingFromListener);
@@ -566,9 +714,7 @@ export default function HomeScreen() {
   }, []);
 
   // ------------------------------
-  // NEW: Setup realtime listeners for location updates for each user sharing with you.
-  // This effect attaches a listener on each user in receivingFromList so that when their
-  // "location" field changes in the DB, we update the markers state.
+  // Setup realtime listeners for location updates for each user sharing with you.
   // ------------------------------
   useEffect(() => {
     const listeners = {};
@@ -583,7 +729,7 @@ export default function HomeScreen() {
               ...prev,
               [user.uid]: {
                 ...userData,
-                location: userData.location, // Expecting { latitude, longitude }
+                location: userData.location,
               },
             }));
           } else {
@@ -598,16 +744,83 @@ export default function HomeScreen() {
         listeners[user.uid] = { ref: userRef, callback };
       });
     } else {
-      // No users are sharing with you—clear any markers.
       setMarkers({});
     }
     return () => {
-      // Cleanup all listeners attached for each sharing user.
       Object.values(listeners).forEach(({ ref: r, callback }) => {
         off(r, 'value', callback);
       });
     };
   }, [receivingFromList]);
+
+  // Create a ref and define snap points for the main bottom sheet.
+  const bottomSheetRef = useRef(null);
+  const snapPoints = useMemo(() => ['10%', '32%', '80%'], []);
+
+  // Ref for the user info bottom sheet modal.
+  const userInfoModalRef = useRef(null);
+
+  // ------------------------------
+  // When a user marker (or bottom sheet item) is pressed, open the user info modal.
+  // ------------------------------
+  const openUserInfo = (user) => {
+    if (tracking) {
+      setTracking(false);
+      setTimeout(() => {
+        cameraRef.current?.setCamera({
+          centerCoordinate: [user.location.longitude, user.location.latitude],
+          animationMode: 'flyTo',
+          animationDuration: 1000,
+        });
+      }, 150);
+    } else {
+      cameraRef.current?.setCamera({
+        centerCoordinate: [user.location.longitude, user.location.latitude],
+        animationMode: 'flyTo',
+        animationDuration: 1000,
+      });
+    }
+    bottomSheetRef.current?.close();
+    setSelectedUserInfo(user);
+  };
+
+  // ------------------------------
+  // When the user info modal is dismissed, clear the selection and reopen the main bottom sheet.
+  // ------------------------------
+  const closeUserInfo = () => {
+    userInfoModalRef.current?.dismiss();
+    setSelectedUserInfo(null);
+    bottomSheetRef.current?.snapToIndex(1);
+  };
+
+  // Present the user info modal when a user is selected.
+  useEffect(() => {
+    if (selectedUserInfo && userInfoModalRef.current) {
+      // Small timeout to ensure the modal is mounted before presenting
+      // setTimeout(() => {
+        userInfoModalRef.current.present();
+      // }, 100);
+    }
+  }, [selectedUserInfo]);
+
+  // ------------------------------
+  // Toggle tracking function (called when track button is pressed)
+  // ------------------------------
+  const toggleTracking = () => {
+    if (!tracking) {
+      setTracking(true);
+      if (currentLocation) {
+        cameraRef.current?.setCamera({
+          centerCoordinate: [currentLocation.longitude, currentLocation.latitude],
+          zoomLevel: 16,
+          animationMode: 'flyTo',
+          animationDuration: 1000,
+        });
+      }
+    } else {
+      setTracking(false);
+    }
+  };
 
   // ------------------------------
   // Validation for Name Fields
@@ -761,7 +974,7 @@ export default function HomeScreen() {
     }
 
     let pickerResult = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ["images"],
       allowsEditing: true,
       aspect: [1, 1],
       quality: 1,
@@ -839,7 +1052,7 @@ export default function HomeScreen() {
           source={
             user.avatar && user.avatar.link
               ? { uri: user.avatar.link }
-              : undefined
+              : { uri: "data:image/png" }
           }
           icon={
             !user.avatar || !user.avatar.link
@@ -863,7 +1076,7 @@ export default function HomeScreen() {
   };
 
   // ------------------------------
-  // Sharing Dialog (same as before)
+  // Sharing Dialog (unchanged)
   // ------------------------------
   function SharingDialog({
     targetUser,
@@ -921,280 +1134,421 @@ export default function HomeScreen() {
   const handleUserPress = async (user) => {
     const currentUser = auth.currentUser;
     if (!currentUser) return;
-
-    // Check sharing status between the current user and the tapped user.
     const status = await getSharingStatus(currentUser.uid, user.uid);
     setSharingStatus(status);
     setSelectedUser(user);
     setShowSharingDialog(true);
   };
 
+  // ---------------
+  // NEW FUNCTIONS FOR THE USER INFO MODAL
+  // ---------------
+
+  // Function to fetch a human-readable location from OpenStreetMap’s reverse API.
+  const fetchReverseGeocode = async (lat, lon) => {
+    try {
+      const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+      const data = await response.json();
+      if (data && data.display_name) {
+        setSelectedUserLocationName(data.display_name);
+      } else {
+        setSelectedUserLocationName("Location not found");
+      }
+    } catch (error) {
+      console.error("Error fetching reverse geocode:", error);
+      setSelectedUserLocationName("Error fetching location");
+    }
+  };
+
+  // Whenever the selected user (in the user info modal) changes—or if their location gets updated in markers—fetch the reverse geocode.
+  useEffect(() => {
+    if (selectedUserInfo) {
+      const loc = (markers[selectedUserInfo.uid] && markers[selectedUserInfo.uid].location) || selectedUserInfo.location;
+      if (loc) {
+        fetchReverseGeocode(loc.latitude, loc.longitude);
+      }
+    }
+  }, [selectedUserInfo, markers]);
+
+  // When the selected user changes, update the sharing status.
+  useEffect(() => {
+    if (selectedUserInfo) {
+      getSharingStatus(auth.currentUser.uid, selectedUserInfo.uid)
+        .then(status => setUserSharingStatus(status))
+        .catch(err => console.error(err));
+    }
+  }, [selectedUserInfo]);
+
+  // Handler to toggle whether you share your location with the selected user.
+  const handleToggleShare = async () => {
+    if (!selectedUserInfo) return;
+    if (userSharingStatus.amSharing) {
+      await stopSharingLocation(auth.currentUser.uid, selectedUserInfo.uid);
+      setUserSharingStatus(prev => ({ ...prev, amSharing: false }));
+    } else {
+      await shareLocation(auth.currentUser.uid, selectedUserInfo.uid);
+      setUserSharingStatus(prev => ({ ...prev, amSharing: true }));
+    }
+  };
+
+  // Handler to stop receiving the selected user’s location.
+  const handleRemoveSharing = async () => {
+    if (!selectedUserInfo) return;
+    await stopReceivingLocation(auth.currentUser.uid, selectedUserInfo.uid);
+    setUserSharingStatus(prev => ({ ...prev, amReceiving: false }));
+  };
+
   // ------------------------------
   // Render
+  // Wrap the content in BottomSheetModalProvider to enable our modal bottom sheet.
   // ------------------------------
   return (
-    <View style={styles.container}>
-      {/* Full-screen Map */}
-      <MapView
-        style={StyleSheet.absoluteFillObject}
-        attributionEnabled={false}
-        logoEnabled={false}
-        scaleBarEnabled={false}
-        compassEnabled={true}
-        compassViewPosition={1}
-        compassViewMargins={{ x: 15, y: 64 }}
-        compassFadeWhenNorth={false}
-      >
-        {/* Shows a blue dot for user location */}
-        <LocationPuck
-          topImage="topImage"
-          visible={true}
-          scale={['interpolate', ['linear'], ['zoom'], 10, 1.0, 20, 4.0]}
-          pulsing={{
-            isEnabled: true,
-            color: 'teal',
-            radius: 50.0,
-          }}
-        />
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <BottomSheetModalProvider>
+        <View style={styles.container}>
+          {/* Full-screen Map */}
+          <MapView
+            style={StyleSheet.absoluteFillObject}
+            attributionEnabled={false}
+            logoEnabled={false}
+            scaleBarEnabled={false}
+            compassEnabled={true}
+            compassViewPosition={0}
+            compassViewMargins={{ x: 15, y: 64 }}
+            compassFadeWhenNorth={false}
+          >
+            <LocationPuck
+              topImage="topImage"
+              visible={true}
+              scale={['interpolate', ['linear'], ['zoom'], 10, 1.0, 20, 4.0]}
+              pulsing={{
+                isEnabled: true,
+                color: 'teal',
+                radius: 50.0,
+              }}
+            />
+            <Camera
+              ref={cameraRef}
+              zoomLevel={16}
+              followUserLocation={tracking}
+              followUserMode={UserTrackingMode.Follow}
+              followZoomLevel={16}
+              onUserTrackingModeChange={(event) => {
+                if (!event.nativeEvent.payload.followUserLocation && tracking) {
+                  setTracking(false);
+                }
+              }}
+            />
+            {Object.keys(markers).map((uid) => {
+              const markerData = markers[uid];
+              if (!markerData.location) return null;
+              return (
+                <MarkerView
+                  key={uid}
+                  id={uid}
+                  coordinate={[
+                    markerData.location.longitude,
+                    markerData.location.latitude,
+                  ]}
+                  allowOverlapWithPuck={true}
+                  allowOverlap={true}
+                >
+                  <UserMarker user={markerData} onPress={() => openUserInfo(markerData)} />
+                </MarkerView>
+              );
+            })}
+          </MapView>
 
-        {/* NEW: Render markers for each user sharing their location with you */}
-        {Object.keys(markers).map((uid) => {
-          const markerData = markers[uid];
-          if (!markerData.location) return null;
-          return (
-            <MarkerView
-              key={uid}
-              id={uid}
-              coordinate={[
-                markerData.location.longitude,
-                markerData.location.latitude,
-              ]}
-              allowOverlapWithPuck={true}
-            >
-              <UserMarker user={markerData} />
-            </MarkerView>
-          );
-        })}
-      </MapView>
-
-      {/* Top row with Settings (left) and Friends (right) buttons */}
-      <View style={styles.topRow}>
-        <TouchableOpacity style={styles.iconButton} onPress={() => setShowSettings(true)}>
-          <MaterialIcons name="settings" size={24} color="black" />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.iconButton} onPress={() => setShowSocial(true)}>
-          <FontAwesome5 name="user-friends" size={20} color="black" />
-        </TouchableOpacity>
-      </View>
-
-      {/* Current location text overlaid at bottom-right */}
-      <View style={styles.locationInfo}>
-        {currentLocation ? (
-          <Text style={styles.locationText}>
-            Lat: {currentLocation.latitude.toFixed(6)}
-            {'\n'}Lng: {currentLocation.longitude.toFixed(6)}
-          </Text>
-        ) : (
-          <Text style={styles.locationText}>No location yet...</Text>
-        )}
-      </View>
-
-      {/* Sign out button overlaid at bottom-left */}
-      <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
-        <Text style={styles.signOutText}>Log Out</Text>
-      </TouchableOpacity>
-
-      {/* ------------- Settings Modal ------------- */}
-      <Modal
-        animationType="slide"
-        transparent={false}
-        visible={showSettings}
-        onRequestClose={() => setShowSettings(false)}
-      >
-        <SafeAreaView style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Settings</Text>
-            <TouchableOpacity onPress={() => setShowSettings(false)}>
-              <MaterialIcons name="close" size={28} color="#000" />
+          {/* Top row with Settings and Friends buttons */}
+          <View style={styles.topRow}>
+            <TouchableOpacity style={styles.iconButton} onPress={() => setShowSettings(true)}>
+              <MaterialIcons name="settings" size={24} color="black" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.iconButton} onPress={() => setShowSocial(true)}>
+              <FontAwesome5 name="user-friends" size={20} color="black" />
             </TouchableOpacity>
           </View>
-          <ScrollView style={styles.modalContent} contentContainerStyle={styles.modalScroll}>
-            <View style={styles.avatarContainer}>
-              <Avatar
-                size={100}
-                rounded
-                source={avatarUri ? { uri: avatarUri } : null}
-                icon={!avatarUri ? { name: 'person', type: 'material' } : undefined}
-                containerStyle={styles.avatar}
-              />
-              {uploading && (
-                <ActivityIndicator
-                  style={{ marginVertical: 10 }}
-                  size="small"
-                  color="#00ADB5"
-                />
-              )}
-              <View style={styles.avatarButtonsContainer}>
-                <TouchableOpacity
-                  style={styles.avatarButton}
-                  onPress={handleSelectImage}
-                  disabled={uploading}
-                >
-                  <Text style={styles.avatarButtonText}>Select Image</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.avatarButton}
-                  onPress={handleRemovePicture}
-                  disabled={uploading}
-                >
-                  <Text style={styles.avatarButtonText}>Remove Picture</Text>
+
+          <TouchableOpacity
+            style={[styles.trackButton, tracking && styles.trackButtonActive]}
+            onPress={toggleTracking}
+          >
+            <MaterialIcons name="my-location" size={24} color={tracking ? '#fff' : '#000'} />
+          </TouchableOpacity>
+
+          {/* ------------- Settings Modal ------------- */}
+          <Modal
+            animationType="slide"
+            transparent={false}
+            visible={showSettings}
+            onRequestClose={() => setShowSettings(false)}
+          >
+            <SafeAreaView style={styles.modalContainer}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Settings</Text>
+                <TouchableOpacity onPress={() => setShowSettings(false)}>
+                  <MaterialIcons name="close" size={28} color="#000" />
                 </TouchableOpacity>
               </View>
-            </View>
-
-            {/* First Name Field */}
-            <Text style={styles.label}>First Name</Text>
-            <TextInput
-              style={[styles.input, firstNameError && styles.errorInput]}
-              placeholder="First Name"
-              value={settingsFirstName}
-              onChangeText={handleFirstNameChange}
-            />
-
-            {/* Last Name Field */}
-            <Text style={styles.label}>Last Name</Text>
-            <TextInput
-              style={[styles.input, lastNameError && styles.errorInput]}
-              placeholder="Last Name"
-              value={settingsLastName}
-              onChangeText={handleLastNameChange}
-            />
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
-
-      {/* ------------- People (Social) Modal ------------- */}
-      <Modal
-        animationType="slide"
-        transparent={false}
-        visible={showSocial}
-        onRequestClose={() => setShowSocial(false)}
-      >
-        <SafeAreaView style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>People</Text>
-            <TouchableOpacity onPress={() => setShowSocial(false)}>
-              <MaterialIcons name="close" size={28} color="#000" />
-            </TouchableOpacity>
-          </View>
-          <ScrollView style={styles.modalContent} contentContainerStyle={styles.modalScroll}>
-            <SearchBar
-              placeholder="Search..."
-              onChangeText={setSearch}
-              value={search}
-              platform="default"
-              containerStyle={styles.searchContainer}
-              inputContainerStyle={styles.searchInputContainer}
-              inputStyle={styles.searchInput}
-            />
-
-            {/* If there is at least one character in the search field, show search results */}
-            {search.trim().length > 0 ? (
-              <>
-                {searchResults.length > 0 ? (
-                  searchResults.map((user) => (
-                    <UserListItem key={user.uid} user={user} onPress={handleUserPress} />
-                  ))
-                ) : (
-                  <Text style={{ textAlign: 'center', marginTop: 20 }}>
-                    No users found.
-                  </Text>
-                )}
-              </>
-            ) : (
-              <>
-                <ListItem.Accordion
-                  content={
-                    <ListItem.Content>
-                      <ListItem.Title>Sharing With</ListItem.Title>
-                    </ListItem.Content>
-                  }
-                  isExpanded={expanded1}
-                  onPress={() => setExpanded1(!expanded1)}
-                >
-                  {sharingWithList.length > 0 ? (
-                    sharingWithList.map((user) => (
-                      <UserListItem key={user.uid} user={user} onPress={handleUserPress} />
-                    ))
-                  ) : (
-                    <Text style={{ margin: 10, textAlign: 'center' }}>
-                      You are not sharing your location yet.
+              <ScrollView style={styles.modalContent} contentContainerStyle={styles.modalScroll}>
+                {/* Current location (centered) */}
+                <View style={styles.currentLocationContainer}>
+                  {currentLocation ? (
+                    <Text style={styles.currentLocationText}>
+                      {currentLocation.latitude.toFixed(6)} {currentLocation.longitude.toFixed(6)}
                     </Text>
+                  ) : (
+                    <Text style={styles.currentLocationText}>No location yet...</Text>
                   )}
-                </ListItem.Accordion>
-
-                <Divider
-                  style={{ width: '100%' }}
-                  insetType="middle"
-                  width={1}
-                  orientation="horizontal"
+                </View>
+                <View style={styles.avatarContainer}>
+                  <Avatar
+                    size={100}
+                    rounded
+                    source={avatarUri ? { uri: avatarUri } : { uri: "data:image/png" }}
+                    icon={!avatarUri ? { name: 'person', type: 'material' } : undefined}
+                    containerStyle={styles.avatar}
+                  />
+                  {uploading && (
+                    <ActivityIndicator
+                      style={{ marginVertical: 10 }}
+                      size="small"
+                      color="#00ADB5"
+                    />
+                  )}
+                  <View style={styles.avatarButtonsContainer}>
+                    <TouchableOpacity
+                      style={styles.avatarButton}
+                      onPress={handleSelectImage}
+                      disabled={uploading}
+                    >
+                      <Text style={styles.avatarButtonText}>{avatarUri ? 'Replace Image' : 'Select Image'}</Text>
+                    </TouchableOpacity>
+                    {avatarUri && (
+                      <TouchableOpacity
+                        style={styles.avatarButton}
+                        onPress={handleRemovePicture}
+                        disabled={uploading}
+                      >
+                        <Text style={styles.avatarButtonText}>Remove Picture</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+                {/* First Name Field */}
+                <Text style={styles.label}>First Name</Text>
+                <TextInput
+                  style={[styles.input, firstNameError && styles.errorInput]}
+                  placeholder="First Name"
+                  value={settingsFirstName}
+                  onChangeText={handleFirstNameChange}
                 />
+                {/* Last Name Field */}
+                <Text style={styles.label}>Last Name</Text>
+                <TextInput
+                  style={[styles.input, lastNameError && styles.errorInput]}
+                  placeholder="Last Name"
+                  value={settingsLastName}
+                  onChangeText={handleLastNameChange}
+                />
+              </ScrollView>
+              {/* Log Out button at the bottom of Settings modal */}
+              <View style={styles.modalFooter}>
+                <TouchableOpacity style={styles.logoutButton} onPress={handleSignOut}>
+                  <Text style={styles.logoutButtonText}>Log Out</Text>
+                </TouchableOpacity>
+              </View>
+            </SafeAreaView>
+          </Modal>
 
-                <ListItem.Accordion
-                  content={
-                    <ListItem.Content>
-                      <ListItem.Title>Receiving Locations</ListItem.Title>
-                    </ListItem.Content>
-                  }
-                  isExpanded={expanded2}
-                  onPress={() => setExpanded2(!expanded2)}
-                >
-                  {receivingFromList.length > 0 ? (
-                    receivingFromList.map((user) => (
-                      <UserListItem key={user.uid} user={user} onPress={handleUserPress} />
-                    ))
-                  ) : (
-                    <Text style={{ margin: 10, textAlign: 'center' }}>
-                      Nobody has shared with you yet.
+          {/* ------------- People (Social) Modal ------------- */}
+          <Modal
+            animationType="slide"
+            transparent={false}
+            visible={showSocial}
+            onRequestClose={() => setShowSocial(false)}
+          >
+            <SafeAreaView style={styles.modalContainer}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>People</Text>
+                <TouchableOpacity onPress={() => setShowSocial(false)}>
+                  <MaterialIcons name="close" size={28} color="#000" />
+                </TouchableOpacity>
+              </View>
+              <ScrollView style={styles.modalContent} contentContainerStyle={styles.modalScroll}>
+                <SearchBar
+                  placeholder="Search..."
+                  onChangeText={setSearch}
+                  value={search}
+                  platform="default"
+                  containerStyle={styles.searchContainer}
+                  inputContainerStyle={styles.searchInputContainer}
+                  inputStyle={styles.searchInput}
+                />
+                {search.trim().length > 0 ? (
+                  <>
+                    {searchResults.length > 0 ? (
+                      searchResults.map((user) => (
+                        <UserListItem key={user.uid} user={user} onPress={handleUserPress} />
+                      ))
+                    ) : (
+                      <Text style={{ textAlign: 'center', marginTop: 20 }}>
+                        No users found.
+                      </Text>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <ListItem.Accordion
+                      content={
+                        <ListItem.Content>
+                          <ListItem.Title>Sharing With</ListItem.Title>
+                        </ListItem.Content>
+                      }
+                      isExpanded={expanded1}
+                      onPress={() => setExpanded1(!expanded1)}
+                    >
+                      {sharingWithList.length > 0 ? (
+                        sharingWithList.map((user) => (
+                          <UserListItem key={user.uid} user={user} onPress={handleUserPress} />
+                        ))
+                      ) : (
+                        <Text style={{ margin: 10, textAlign: 'center' }}>
+                          You are not sharing your location yet.
+                        </Text>
+                      )}
+                    </ListItem.Accordion>
+                    <Divider style={{ width: '100%' }} insetType="middle" width={1} orientation="horizontal" />
+                    <ListItem.Accordion
+                      content={
+                        <ListItem.Content>
+                          <ListItem.Title>Receiving Locations</ListItem.Title>
+                        </ListItem.Content>
+                      }
+                      isExpanded={expanded2}
+                      onPress={() => setExpanded2(!expanded2)}
+                    >
+                      {receivingFromList.length > 0 ? (
+                        receivingFromList.map((user) => (
+                          <UserListItem key={user.uid} user={user} onPress={handleUserPress} />
+                        ))
+                      ) : (
+                        <Text style={{ margin: 10, textAlign: 'center' }}>
+                          Nobody has shared with you yet.
+                        </Text>
+                      )}
+                    </ListItem.Accordion>
+                  </>
+                )}
+              </ScrollView>
+            </SafeAreaView>
+          </Modal>
+
+          {/* ------------- Sharing Dialog Modal ------------- */}
+          {showSharingDialog && selectedUser && (
+            <Modal
+              animationType="fade"
+              transparent={true}
+              visible={showSharingDialog}
+              onRequestClose={() => setShowSharingDialog(false)}
+            >
+              <View style={dialogStyles.overlay}>
+                <View style={dialogStyles.dialogBox}>
+                  <SharingDialog
+                    targetUser={selectedUser}
+                    sharingStatus={sharingStatus}
+                    onShare={async () => {
+                      await shareLocation(auth.currentUser.uid, selectedUser.uid);
+                    }}
+                    onStopSharing={async () => {
+                      await stopSharingLocation(auth.currentUser.uid, selectedUser.uid);
+                    }}
+                    onStopReceiving={async () => {
+                      await stopReceivingLocation(auth.currentUser.uid, selectedUser.uid);
+                    }}
+                    onClose={() => setShowSharingDialog(false)}
+                  />
+                </View>
+              </View>
+            </Modal>
+          )}
+
+          {/* -----------------------------
+               Main Bottom Sheet for Shared Users
+          ----------------------------- */}
+          <BottomSheet
+            ref={bottomSheetRef}
+            index={1}
+            snapPoints={snapPoints}
+            enablePanDownToClose={false}
+            backgroundStyle={{ borderRadius: 20 }}
+          >
+            <BottomSheetScrollView contentContainerStyle={styles.bottomSheetContent}>
+              <Text style={styles.bottomSheetTitle}>People</Text>
+              {receivingFromList.length > 0 ? (
+                receivingFromList.map((user) => (
+                  <BottomSheetUserItem
+                    key={user.uid}
+                    user={markers[user.uid] ? { ...user, ...markers[user.uid] } : user}
+                    currentLocation={currentLocation}
+                    onPress={() => openUserInfo(user)}
+                  />
+                ))
+              ) : (
+                <Text style={{ textAlign: 'center', padding: 20 }}>
+                  No one is sharing location with you.
+                </Text>
+              )}
+            </BottomSheetScrollView>
+          </BottomSheet>
+
+          {/* -----------------------------
+               User Info Bottom Sheet Modal
+               (Always rendered so that it can be presented when needed)
+          ----------------------------- */}
+          <BottomSheetModal
+            ref={userInfoModalRef}
+            index={0}
+            snapPoints={['32%', '80%']}
+            onDismiss={closeUserInfo}
+            backgroundStyle={{ borderRadius: 20 }}
+          >
+            {selectedUserInfo ? (
+              <BottomSheetView style={{ padding: 20 }}>
+                <View style={styles.userInfoHeader}>
+                  <Text style={styles.userInfoName}>
+                    {(`${selectedUserInfo.firstName || ''} ${selectedUserInfo.lastName || ''}`).trim()}
+                  </Text>
+                  <TouchableOpacity style={styles.userInfoCloseButton} onPress={closeUserInfo}>
+                    <MaterialIcons name="close" size={24} color="#000" />
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.userInfoLocation}>
+                  {selectedUserLocationName ? selectedUserLocationName : "Loading location..."}
+                </Text>
+                <Text style={styles.userInfoTimestamp}>
+                  <LiveTimeAgo timestamp={selectedUserInfo.locationTimestamp} />
+                </Text>
+                <View style={styles.userInfoButtonsContainer}>
+                  <TouchableOpacity style={styles.userInfoButton} onPress={handleToggleShare}>
+                    <Text style={styles.userInfoButtonText}>
+                      {userSharingStatus.amSharing ? "Stop Sharing My Location" : "Share My Location"}
                     </Text>
+                  </TouchableOpacity>
+                  {userSharingStatus.amReceiving && (
+                    <TouchableOpacity style={styles.userInfoButton} onPress={handleRemoveSharing}>
+                      <Text style={styles.userInfoButtonText}>
+                        Remove {selectedUserInfo.firstName}
+                      </Text>
+                    </TouchableOpacity>
                   )}
-                </ListItem.Accordion>
-              </>
-            )}
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
-
-      {showSharingDialog && selectedUser && (
-        <Modal
-          animationType="fade"
-          transparent={true}
-          visible={showSharingDialog}
-          onBackdropPress={() => setShowSharingDialog(false)}
-          onRequestClose={() => setShowSharingDialog(false)}
-        >
-          <View style={dialogStyles.overlay}>
-            <View style={dialogStyles.dialogBox}>
-              <SharingDialog
-                targetUser={selectedUser}
-                sharingStatus={sharingStatus}
-                onShare={async () => {
-                  await shareLocation(auth.currentUser.uid, selectedUser.uid);
-                  // Optionally, update sharingStatus if needed.
-                }}
-                onStopSharing={async () => {
-                  await stopSharingLocation(auth.currentUser.uid, selectedUser.uid);
-                }}
-                onStopReceiving={async () => {
-                  await stopReceivingLocation(auth.currentUser.uid, selectedUser.uid);
-                }}
-                onClose={() => setShowSharingDialog(false)}
-              />
-            </View>
-          </View>
-        </Modal>
-      )}
-    </View>
+                </View>
+              </BottomSheetView>
+            ) : null}
+          </BottomSheetModal>
+        </View>
+      </BottomSheetModalProvider>
+    </GestureHandlerRootView>
   );
 }
 
@@ -1228,30 +1582,34 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 3,
   },
-  locationInfo: {
+  trackButton: {
     position: 'absolute',
-    bottom: 40,
+    top: 64,
     right: 15,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    padding: 8,
-    borderRadius: 5,
+    width: 47,
+    height: 47,
+    borderRadius: 25,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 3,
+    zIndex: 999,
   },
-  locationText: {
-    color: '#fff',
-    textAlign: 'left',
+  trackButtonActive: {
+    backgroundColor: '#00ADB5',
   },
-  signOutButton: {
-    position: 'absolute',
-    bottom: 40,
-    left: 15,
-    backgroundColor: '#f54242',
-    borderRadius: 5,
-    paddingHorizontal: 15,
-    paddingVertical: 10,
+  currentLocationContainer: {
+    alignItems: 'center',
+    marginVertical: 20,
   },
-  signOutText: {
-    color: '#fff',
+  currentLocationText: {
     fontSize: 16,
+    textAlign: 'center',
+    color: '#000',
   },
   modalContainer: {
     flex: 1,
@@ -1330,6 +1688,88 @@ const styles = StyleSheet.create({
   },
   avatarButtonText: {
     color: '#fff',
+  },
+  modalFooter: {
+    padding: 20,
+    borderTopWidth: 1,
+    borderColor: '#ccc',
+    alignItems: 'center',
+  },
+  logoutButton: {
+    backgroundColor: '#f54242',
+    borderRadius: 5,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+  },
+  logoutButtonText: {
+    color: '#fff',
+    fontSize: 16,
+  },
+  bottomSheetContent: {
+    backgroundColor: 'white',
+    paddingBottom: 20,
+  },
+  bottomSheetTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    padding: 10,
+    paddingLeft: 20,
+    textAlign: 'left',
+  },
+  userItemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  distanceText: {
+    fontSize: 14,
+    textAlign: 'right',
+    color: '#888',
+  },
+  // New styles for the User Info Modal:
+  userInfoHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  userInfoName: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    flex: 1,
+  },
+  userInfoCloseButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#e0e0e0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  userInfoLocation: {
+    fontSize: 14,
+    color: '#555',
+    marginBottom: 5,
+  },
+  userInfoTimestamp: {
+    fontSize: 14,
+    color: '#555',
+    marginBottom: 15,
+  },
+  userInfoButtonsContainer: {
+    flexDirection: 'column',
+    justifyContent: 'space-around',
+  },
+  userInfoButton: {
+    backgroundColor: '#00ADB5',
+    padding: 12,
+    borderRadius: 5,
+    marginVertical: 5,
+    alignItems: 'center',
+  },
+  userInfoButtonText: {
+    color: '#fff',
+    fontSize: 16,
   },
 });
 
@@ -1625,188 +2065,128 @@ export default ({ config }) => {
 };
 ```
 
-This all works well, but I want to now add a new feature to the home screen. I want to have a Bottom Sheet that will show a list of all the user that have shared their location with me. Each user item in that list should look like the ones from the People modal, except have a placeholder text instead of any status text (and don't have them do anything on click for now). I want it to look and feel like iOS's FindMy app: the bottom sheet should take up a bit less than half the screen by default, can be fully minimised, but can also be swipped to take up the entire screen height. I want you to fully develop and implement this. Here is some documentation to help:
+Here is the code that runs my server that will get the Webhooks:
 
-```
-React Native Bottom Sheet
-Reanimated v3 version Reanimated v2 version Reanimated v1 version
-license npm runs with expo
-NPM Downloads
+```javascript
+// index.js
+require('dotenv').config();
+const express = require('express');
+const crypto = require('crypto');
+const admin = require('firebase-admin');
 
-A performant interactive bottom sheet with fully configurable options 🚀
+// Initialize Firebase Admin
+const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
-Features
-⭐️ Support React Native Web, read more.
-⭐️ Dynamic Sizing, read more.
-⭐️ Support FlashList, read more.
-Modal presentation view, Bottom Sheet Modal.
-Smooth gesture interactions & snapping animations.
-Seamless keyboard handling for iOS & Android.
-Support pull to refresh for scrollables.
-Support FlatList, SectionList, ScrollView & View scrolling interactions, read more.
-Support React Navigation Integration, read more.
-Compatible with Reanimated v1-3.
-Accessibility support.
-Written in TypeScript.
-Installation
-yarn add @gorhom/bottom-sheet@^5
-
-Dependencies
-This library needs these dependencies to be installed in your project before you can use it:
-
-yarn add react-native-reanimated react-native-gesture-handler
-
-Using Expo?
-
-npx expo install react-native-reanimated react-native-gesture-handler
-
-info
-React Native Gesture Handler v3 needs extra steps to finalize its installation, please follow their installation instructions. Please make sure to wrap your App with GestureHandlerRootView when you've upgraded to React Native Gesture Handler ^3.
-
-React Native Reanimated v3 needs extra steps to finalize its installation, please follow their installation instructions.
-```
-
-```
-Usage
-Here is a simple usage of the Bottom Sheet, with non-scrollable content. For more scrollable usage please read Scrollables.
-
-import React, { useCallback, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
-
-const App = () => {
-  // ref
-  const bottomSheetRef = useRef<BottomSheet>(null);
-
-  // callbacks
-  const handleSheetChanges = useCallback((index: number) => {
-    console.log('handleSheetChanges', index);
-  }, []);
-
-  // renders
-  return (
-    <GestureHandlerRootView style={styles.container}>
-      <BottomSheet
-        ref={bottomSheetRef}
-        onChange={handleSheetChanges}
-      >
-        <BottomSheetView style={styles.contentContainer}>
-          <Text>Awesome 🎉</Text>
-        </BottomSheetView>
-      </BottomSheet>
-    </GestureHandlerRootView>
-  );
-};
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: 'grey',
-  },
-  contentContainer: {
-    flex: 1,
-    padding: 36,
-    alignItems: 'center',
-  },
+admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+    databaseURL: 'https://totob12-loco-default-rtdb.firebaseio.com/'
 });
 
-export default App;
-```
+const app = express();
+const PORT = process.env.PORT || 3000;
 
-```
-BottomSheetScrollView
-A pre-integrated React Native ScrollView with BottomSheet gestures.
+// Middleware to parse incoming JSON bodies
+app.use(express.json());
 
-Props
-Inherits ScrollViewProps from react-native.
+// Function to verify the Radar webhook signature
+function verifyRadarSignature(req) {
+    const signingId = req.headers['x-radar-signing-id'];
+    const signature = req.headers['x-radar-signature'];
 
-focusHook
-This needed when bottom sheet used with multiple scrollables to allow bottom sheet detect the current scrollable ref, especially when used with React Navigation. You will need to provide useFocusEffect from @react-navigation/native.
+    if (!signingId || !signature) {
+        console.error('Missing Radar signature headers.');
+        return false;
+    }
 
-type	default	required
-function	React.useEffect	NO
-Ignored Props
-These props will be ignored if they were passed, because of the internal integration that uses them.
+    // Use the token from an environment variable if set
+    const token = process.env.RADAR_WEBHOOK_TOKEN || 'null';
+    const hmac = crypto.createHmac('sha1', token);
+    hmac.update(signingId);
+    const computedSignature = hmac.digest('hex');
 
-scrollEventThrottle
-decelerationRate
-onScrollBeginDrag
-Example
-import React, { useCallback, useRef, useMemo } from "react";
-import { StyleSheet, View, Text, Button } from "react-native";
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import BottomSheet, { BottomSheetScrollView } from "@gorhom/bottom-sheet";
+    if (computedSignature !== signature) {
+        console.error('Invalid Radar signature:', { computedSignature, signature });
+        return false;
+    }
+    return true;
+}
 
-const App = () => {
-  // hooks
-  const sheetRef = useRef<BottomSheet>(null);
+// POST endpoint for Radar webhooks
+app.post('/api', async (req, res) => {
+    // Verify the request is coming from Radar
+    if (!verifyRadarSignature(req)) {
+        return res.status(403).send('Forbidden: Invalid signature');
+    }
 
-  // variables
-  const data = useMemo(
-    () =>
-      Array(50)
-        .fill(0)
-        .map((_, index) => `index-${index}`),
-    []
-  );
-  const snapPoints = useMemo(() => ["25%", "50%", "90%"], []);
+    // Radar may send a single event (key: "event") or multiple events (key: "events")
+    let events = [];
+    if (req.body.event) {
+        events.push(req.body.event);
+    } else if (req.body.events && Array.isArray(req.body.events)) {
+        events = req.body.events;
+    } else {
+        console.error('No event data found in request body.');
+        return res.status(400).send('Bad Request: No event data');
+    }
 
-  // callbacks
-  const handleSheetChange = useCallback((index) => {
-    console.log("handleSheetChange", index);
-  }, []);
-  const handleSnapPress = useCallback((index) => {
-    sheetRef.current?.snapToIndex(index);
-  }, []);
-  const handleClosePress = useCallback(() => {
-    sheetRef.current?.close();
-  }, []);
+    // console.log(events);
 
-  // render
-  const renderItem = useCallback(
-    (item) => (
-      <View key={item} style={styles.itemContainer}>
-        <Text>{item}</Text>
-      </View>
-    ),
-    []
-  );
-  return (
-    <GestureHandlerRootView style={styles.container}>
-      <Button title="Snap To 90%" onPress={() => handleSnapPress(2)} />
-      <Button title="Snap To 50%" onPress={() => handleSnapPress(1)} />
-      <Button title="Snap To 25%" onPress={() => handleSnapPress(0)} />
-      <Button title="Close" onPress={() => handleClosePress()} />
-      <BottomSheet
-        ref={sheetRef}
-        index={1}
-        snapPoints={snapPoints}
-        enableDynamicSizing={false}
-        onChange={handleSheetChange}
-      >
-        <BottomSheetScrollView contentContainerStyle={styles.contentContainer}>
-          {data.map(renderItem)}
-        </BottomSheetScrollView>
-      </BottomSheet>
-    </GestureHandlerRootView>
-  );
-};
+    // Process each event received from Radar
+    for (const event of events) {
+        try {
+            // Extract the user ID. Radar’s payload nests the user info in "user"
+            const userId = event.user && event.user.userId ? event.user.userId : null;
+            if (!userId) {
+                console.error('No userId found in event:', event);
+                continue; // Skip this event if no userId is found
+            }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    paddingTop: 200,
-  },
-  contentContainer: {
-    backgroundColor: "white",
-  },
-  itemContainer: {
-    padding: 6,
-    margin: 6,
-    backgroundColor: "#eee",
-  },
+            // Ensure that the event contains valid location data
+            if (event.location &&
+                event.location.coordinates &&
+                event.location.coordinates.length === 2) {
+
+                // Radar sends coordinates as [longitude, latitude]
+                const [longitude, latitude] = event.location.coordinates;
+                // Use the event's createdAt timestamp if available; otherwise use Firebase's server timestamp
+                const timestamp = event.createdAt
+                    ? new Date(event.createdAt).getTime()
+                    : admin.database.ServerValue.TIMESTAMP;
+
+                // Update the user's location in the Firebase Realtime Database
+                await admin.database().ref(`users/${userId}`).update({
+                    location: { latitude, longitude },
+                    locationTimestamp: timestamp,
+                });
+
+                console.log(`Updated location for user ${userId}: (${latitude}, ${longitude})`);
+            } else {
+                console.error('Event does not contain valid location data:', event);
+            }
+        } catch (error) {
+            console.error('Error processing event:', error);
+        }
+    }
+
+    // Always respond with a 2xx status code to acknowledge receipt
+    res.status(200).send('OK');
 });
 
-export default App;
+// A simple health-check endpoint (optional)
+app.get('/health', (req, res) => {
+    res.send('Server is healthy');
+});
+
+// Start the server
+app.listen(PORT, () => {
+    console.log(`Radar Webhook server listening on port ${PORT}`);
+});
 ```
+
+This entire setup currently works, but I am having a issues with the updates that the app receives. For example:
+
+- if I have a user selected and opened in the user info bottom sheet modal, but then open the people modal and start sharing with that same user and return back to the user info sheet, the buttons on that sheet will not update properly until I close it and reopen it.
+- if I remove a user by clicking on the "Remove {first name}" button in the user info sheet modal (meaning that they were sharing their location with me), their marker stays on the map and the user info sheet stays open: but I am no longer a receiver of this user, I should not be a ble to still see these
+- if a user that has shared their location with me updates their profile picture, I can see the new image in real-time on the map and in the bottom modal, but the image will not update in the two lists in the 'People' modal ("Sharing With" and "Receiving Locations")
+
+Along with a few other problems, I need all this to be fixed. I need the entire app to listen to any changes made to user items that are sharing with them, and have all UI element update in real-time. I need you to fully redevelop this behind the scenes functionality, and implement it completely into my app. I need you to give me the entire new `HomeScreen.js` file.
