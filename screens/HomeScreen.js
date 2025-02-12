@@ -59,9 +59,9 @@ function getDistanceFromLatLonInMiles(lat1, lon1, lat2, lon2) {
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos(deg2rad(lat1)) *
-      Math.cos(deg2rad(lat2)) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
+    Math.cos(deg2rad(lat2)) *
+    Math.sin(dLon / 2) *
+    Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 }
@@ -373,9 +373,10 @@ export default function HomeScreen() {
     const sharingWithRef = ref(db, `users/${currentUser.uid}/sharingWith`);
     const unsubscribe = onValue(sharingWithRef, (snapshot) => {
       const data = snapshot.val() || {};
+      // Always force a new array reference so the dependent effect fires
       setSharingWithIds(Object.keys(data));
     });
-    return () => off(sharingWithRef, 'value', unsubscribe);
+    return () => unsubscribe();
   }, []);
 
   // "receivingFrom" list (users sharing with you)
@@ -387,16 +388,20 @@ export default function HomeScreen() {
       const data = snapshot.val() || {};
       setReceivingFromIds(Object.keys(data));
     });
-    return () => off(receivingFromRef, 'value', unsubscribe);
+    return () => unsubscribe();
   }, []);
+
 
   // Subscribe to each user in "sharingWith"
   const sharingWithListenersRef = useRef({});
   useEffect(() => {
+    // Unsubscribe from any uid no longer in sharingWithIds.
     Object.keys(sharingWithListenersRef.current).forEach((uid) => {
       if (!sharingWithIds.includes(uid)) {
+        // Unsubscribe from this user’s listener
         sharingWithListenersRef.current[uid]();
         delete sharingWithListenersRef.current[uid];
+        // Remove the user's data from state
         setSharingWithData((prev) => {
           const newData = { ...prev };
           delete newData[uid];
@@ -404,6 +409,7 @@ export default function HomeScreen() {
         });
       }
     });
+    // For each uid in sharingWithIds, attach a listener if not already attached.
     sharingWithIds.forEach((uid) => {
       if (!sharingWithListenersRef.current[uid]) {
         const userRef = ref(db, `users/${uid}`);
@@ -414,11 +420,16 @@ export default function HomeScreen() {
         sharingWithListenersRef.current[uid] = unsubscribe;
       }
     });
+    // No cleanup here so we don't remove listeners unnecessarily.
+  }, [sharingWithIds]);
+
+  // Cleanup all sharingWith listeners when the component unmounts
+  useEffect(() => {
     return () => {
       Object.values(sharingWithListenersRef.current).forEach((unsubscribe) => unsubscribe());
       sharingWithListenersRef.current = {};
     };
-  }, [sharingWithIds]);
+  }, []);
 
   // Subscribe to each user in "receivingFrom"
   const receivingFromListenersRef = useRef({});
@@ -444,11 +455,14 @@ export default function HomeScreen() {
         receivingFromListenersRef.current[uid] = unsubscribe;
       }
     });
+  }, [receivingFromIds]);
+
+  useEffect(() => {
     return () => {
       Object.values(receivingFromListenersRef.current).forEach((unsubscribe) => unsubscribe());
       receivingFromListenersRef.current = {};
     };
-  }, [receivingFromIds]);
+  }, []);
 
   /* --- Compute markers from receivingFrom users --- */
   const markers = useMemo(() => {
@@ -812,9 +826,9 @@ export default function HomeScreen() {
   /* --- Compute sharing status for People modal item --- */
   const socialUserSharingStatus = selectedSocialUser
     ? {
-        amSharing: sharingWithIds.includes(selectedSocialUser.uid),
-        amReceiving: receivingFromIds.includes(selectedSocialUser.uid),
-      }
+      amSharing: sharingWithIds.includes(selectedSocialUser.uid),
+      amReceiving: receivingFromIds.includes(selectedSocialUser.uid),
+    }
     : { amSharing: false, amReceiving: false };
 
   /* -------------------------
