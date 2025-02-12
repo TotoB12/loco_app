@@ -7,12 +7,12 @@ export default ({ config }) => {
     "slug": "loco",
     "version": "0.1.4",
     "orientation": "portrait",
-    "icon": "./assets/icon.jpg",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#212832"
+      "backgroundColor": "#19456B"
     },
     "newArchEnabled": false,
     "experiments": {
@@ -69,10 +69,6 @@ export default ({ config }) => {
     "android": {
       "package": "com.antoninbeliard.loco",
       "icon": "./assets/icon.png",
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#212832"
-      },
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
