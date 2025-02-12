@@ -8,11 +8,11 @@ export default ({ config }) => {
     "version": "0.1.5",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "light",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#19456B"
+      "backgroundColor": "#F8F1F1"
     },
     "newArchEnabled": false,
     "experiments": {

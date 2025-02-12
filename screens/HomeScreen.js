@@ -32,6 +32,8 @@ import {
   stopReceivingLocation,
 } from '../sharingUtils';
 
+import { COLORS } from '../colors';
+
 /* -------------------------
    Utility Functions
 ------------------------- */
@@ -1151,10 +1153,11 @@ export default function HomeScreen() {
                 </Text>
                 <View style={styles.userInfoButtonsContainer}>
                   <TouchableOpacity style={styles.userInfoButton} onPress={handleToggleShare}>
-                    <Text style={styles.userInfoButtonText}>
+                    <Text style={[styles.userInfoButtonText, { color: userSharingStatus.amSharing ? "red" : COLORS.black }]}>
                       {userSharingStatus.amSharing ? "Stop Sharing My Location" : "Share My Location"}
                     </Text>
                   </TouchableOpacity>
+                  <Divider style={{ width: '100%', marginVertical: 5 }} />
                   {userSharingStatus.amReceiving && (
                     <TouchableOpacity style={styles.userInfoButton} onPress={handleRemoveSharing}>
                       <Text style={styles.userInfoButtonText}>
@@ -1300,10 +1303,10 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   avatarButton: {
-    backgroundColor: '#00ADB5',
+    backgroundColor: COLORS.navy,
     paddingHorizontal: 15,
     paddingVertical: 8,
-    borderRadius: 5,
+    borderRadius: 10,
     marginHorizontal: 5,
   },
   avatarButtonText: {
@@ -1317,7 +1320,7 @@ const styles = StyleSheet.create({
   },
   logoutButton: {
     backgroundColor: '#f54242',
-    borderRadius: 5,
+    borderRadius: 10,
     paddingHorizontal: 15,
     paddingVertical: 10,
   },
@@ -1378,16 +1381,19 @@ const styles = StyleSheet.create({
   userInfoButtonsContainer: {
     flexDirection: 'column',
     justifyContent: 'space-around',
+    padding: 5,
+    backgroundColor: COLORS.white,
+    borderRadius: 10,
   },
   userInfoButton: {
-    backgroundColor: '#00ADB5',
-    padding: 12,
+    // backgroundColor: "red",
+    padding: 5,
     borderRadius: 5,
     marginVertical: 5,
     alignItems: 'center',
   },
   userInfoButtonText: {
-    color: '#fff',
+    color: "red",
     fontSize: 16,
   },
 });

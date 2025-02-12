@@ -14,6 +14,8 @@ import {
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebaseConfig';
 
+import { COLORS } from '../colors';
+
 export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -69,7 +71,7 @@ export default function LoginScreen({ navigation }) {
           </TouchableOpacity>
 
           <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
-            <Text style={{ marginTop: 20, color: '#0275d8' }}>
+            <Text style={{ marginTop: 20, color: COLORS.navy }}>
               Don’t have an account? Sign up
             </Text>
           </TouchableOpacity>
@@ -87,33 +89,33 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
     justifyContent: 'center',
-    backgroundColor: '#212832', // or your preferred background
+    backgroundColor: COLORS.white,
   },
   title: {
     fontSize: 32,
-    color: '#fff',
+    color: COLORS.black,
     marginBottom: 30,
     textAlign: 'center',
   },
   input: {
     width: '100%',
     height: 50,
-    backgroundColor: '#333',
+    backgroundColor: COLORS.white,
     borderRadius: 5,
     paddingHorizontal: 15,
-    color: '#fff',
+    color: COLORS.black,
     marginBottom: 15,
   },
   button: {
     height: 50,
-    backgroundColor: '#00ADB5',
+    backgroundColor: COLORS.blue,
     borderRadius: 5,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 15,
   },
   buttonText: {
-    color: '#fff',
+    color: COLORS.white,
     fontSize: 18,
   },
 });
