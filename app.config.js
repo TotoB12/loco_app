@@ -5,7 +5,7 @@ export default ({ config }) => {
     ...config,
     "name": "loco",
     "slug": "loco",
-    "version": "0.1.4",
+    "version": "0.1.5",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
