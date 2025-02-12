@@ -1,4 +1,4 @@
-// HomeScreen.js
+// screens/HomeScreen.js
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
