@@ -9,11 +9,6 @@ export default ({ config }) => {
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#F8F1F1"
-    },
     "newArchEnabled": false,
     "experiments": {
       "turboModules": false,
@@ -50,7 +45,15 @@ export default ({ config }) => {
           "locationWhenInUsePermission": "Show current location on map."
         }
       ],
-      ["expo-image-picker"]
+      ["expo-image-picker"],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#19456B",
+          "image": "./assets/splash.png",
+          "imageWidth": 200
+        }
+      ]
     ],
     "ios": {
       "supportsTablet": true,
@@ -60,11 +63,9 @@ export default ({ config }) => {
           "fetch"
         ],
         "NSLocationWhenInUseUsageDescription": "Show current location on map",
+        "NSLocationAlwaysUsageDescription": "Background location usage...",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Background location usage..."
-      },
-      "config": {
-        "googleMapsApiKey": "AIzaSyCCkJk7m5UqYt9_dHHxjA0zzvWKadSn41U"
-      },
+      }
     },
     "android": {
       "package": "com.antoninbeliard.loco",
@@ -77,12 +78,7 @@ export default ({ config }) => {
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_BACKGROUND_LOCATION",
         "android.permission.FOREGROUND_SERVICE"
-      ],
-      "config": {
-        "googleMaps": {
-          "apiKey": "AIzaSyAgtPIWpSfr1a2dxUdBxXVw7Xah1yqL9YQ"
-        }
-      }
+      ]
     },
     "extra": {
       "eas": {
