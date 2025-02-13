@@ -157,8 +157,6 @@ packagingOptions {
 dependencies {
 
     implementation "com.google.android.gms:play-services-location:21.0.1"
-
-    implementation "com.google.android.play:integrity:1.2.0"
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
 

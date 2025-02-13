@@ -1866,8 +1866,8 @@ package.json
 }
 ```
 
-app.json
-```json
+app.config.js
+```javscript
 import 'dotenv/config';
 
 export default ({ config }) => {
@@ -1875,15 +1875,10 @@ export default ({ config }) => {
     ...config,
     "name": "loco",
     "slug": "loco",
-    "version": "0.1.4",
+    "version": "0.1.5",
     "orientation": "portrait",
-    "icon": "./assets/icon.jpg",
-    "userInterfaceStyle": "dark",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#212832"
-    },
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
     "newArchEnabled": false,
     "experiments": {
       "turboModules": false,
@@ -1920,7 +1915,15 @@ export default ({ config }) => {
           "locationWhenInUsePermission": "Show current location on map."
         }
       ],
-      ["expo-image-picker"]
+      ["expo-image-picker"],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#19456B",
+          "image": "./assets/splash.png",
+          "imageWidth": 200
+        }
+      ]
     ],
     "ios": {
       "supportsTablet": true,
@@ -1930,19 +1933,13 @@ export default ({ config }) => {
           "fetch"
         ],
         "NSLocationWhenInUseUsageDescription": "Show current location on map",
+        "NSLocationAlwaysUsageDescription": "Background location usage...",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Background location usage..."
-      },
-      "config": {
-        "googleMapsApiKey": "AIzaSyCCkJk7m5UqYt9_dHHxjA0zzvWKadSn41U"
-      },
+      }
     },
     "android": {
       "package": "com.antoninbeliard.loco",
       "icon": "./assets/icon.png",
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#212832"
-      },
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
@@ -1951,12 +1948,7 @@ export default ({ config }) => {
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_BACKGROUND_LOCATION",
         "android.permission.FOREGROUND_SERVICE"
-      ],
-      "config": {
-        "googleMaps": {
-          "apiKey": "AIzaSyAgtPIWpSfr1a2dxUdBxXVw7Xah1yqL9YQ"
-        }
-      }
+      ]
     },
     "extra": {
       "eas": {
@@ -2085,4 +2077,5 @@ app.listen(PORT, () => {
 });
 ```
 
-This setup works, but 
+This setup works, but I've only been developing on Android development builds so far. I just made a build for iOS, but get this: "This ap is missing usage descriptions, so location services will fail. Add one of the `NSLocation*UsageDescription` keys to your bundle's Info.plist.".
+What do I have to do? I know that for Android I need to run `npx expo prebuild --clean` for any big change like that, but is there something that I am missing for iOS?

@@ -8,6 +8,7 @@ export default ({ config }) => {
     "version": "0.1.5",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
+    "platforms": ["ios", "android"],
     "userInterfaceStyle": "light",
     "newArchEnabled": false,
     "experiments": {
@@ -24,9 +25,10 @@ export default ({ config }) => {
         {
           "iosFraud": false,
           "iosNSLocationWhenInUseUsageDescription": "We use your location to help share your position in real-time.",
+          "iosNSLocationAlwaysUsageDescription": "Background location is used so your friends can see your location even if the app is closed.",
           "iosNSLocationAlwaysAndWhenInUseUsageDescription": "Background location is used so your friends can see your location even if the app is closed.",
           "iosBackgroundMode": true,
-          "androidFraud": true,
+          "androidFraud": false,
           "androidBackgroundPermission": true,
           "androidFineLocationPermission": true,
           "addRadarSDKMotion": false
@@ -42,7 +44,8 @@ export default ({ config }) => {
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Show current location on map."
+          "locationWhenInUsePermission": "Show current location on map.",
+          "locationAlwaysAndWhenInUsePermission": "Allow Loco to use your location."
         }
       ],
       ["expo-image-picker"],
@@ -62,9 +65,9 @@ export default ({ config }) => {
           "location",
           "fetch"
         ],
-        "NSLocationWhenInUseUsageDescription": "Show current location on map",
-        "NSLocationAlwaysUsageDescription": "Background location usage...",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Background location usage..."
+        // "NSLocationWhenInUseUsageDescription": "Show current location on map",
+        // "NSLocationAlwaysUsageDescription": "Background location usage...",
+        // "NSLocationAlwaysAndWhenInUseUsageDescription": "Background location usage..."
       }
     },
     "android": {
@@ -74,10 +77,7 @@ export default ({ config }) => {
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION",
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.ACCESS_BACKGROUND_LOCATION",
-        "android.permission.FOREGROUND_SERVICE"
+        "FOREGROUND_SERVICE"
       ]
     },
     "extra": {
