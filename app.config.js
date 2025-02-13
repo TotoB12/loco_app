@@ -24,9 +24,9 @@ export default ({ config }) => {
         "react-native-radar",
         {
           "iosFraud": false,
-          "iosNSLocationWhenInUseUsageDescription": "We use your location to help share your position in real-time.",
-          "iosNSLocationAlwaysUsageDescription": "Background location is used so your friends can see your location even if the app is closed.",
-          "iosNSLocationAlwaysAndWhenInUseUsageDescription": "Background location is used so your friends can see your location even if the app is closed.",
+          // "iosNSLocationWhenInUseUsageDescription": "We use your location to help share your position in real-time.",
+          // "iosNSLocationAlwaysUsageDescription": "Background location is used so your friends can see your location even if the app is closed.",
+          // "iosNSLocationAlwaysAndWhenInUseUsageDescription": "Background location is used so your friends can see your location even if the app is closed.",
           "iosBackgroundMode": true,
           "androidFraud": false,
           "androidBackgroundPermission": true,
@@ -67,9 +67,9 @@ export default ({ config }) => {
           "location",
           "fetch"
         ],
-        "NSLocationWhenInUseUsageDescription": "Show current location on map",
-        "NSLocationAlwaysUsageDescription": "Background location usage...",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Background location usage..."
+        "NSLocationWhenInUseUsageDescription": "We need your location to show your position on the map and share it with friends.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "We need background location access to share your live location with friends, even when the app is in the background or closed.",
+        "NSLocationAlwaysUsageDescription": "We need background location access to share your live location with friends, even when the app is in the background or closed." // Include this for older iOS versions, even though it's deprecated.
       }
     },
     "android": {
