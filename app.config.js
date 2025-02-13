@@ -45,6 +45,7 @@ export default ({ config }) => {
         "expo-location",
         {
           "locationWhenInUsePermission": "Show current location on map.",
+          "locationAlwaysPermission": "Background location usage...",
           "locationAlwaysAndWhenInUsePermission": "Allow Loco to use your location."
         }
       ],
@@ -59,15 +60,16 @@ export default ({ config }) => {
       ]
     ],
     "ios": {
+      "buildNumber": "0.1.5",
       "supportsTablet": true,
       "infoPlist": {
         "UIBackgroundModes": [
           "location",
           "fetch"
         ],
-        // "NSLocationWhenInUseUsageDescription": "Show current location on map",
-        // "NSLocationAlwaysUsageDescription": "Background location usage...",
-        // "NSLocationAlwaysAndWhenInUseUsageDescription": "Background location usage..."
+        "NSLocationWhenInUseUsageDescription": "Show current location on map",
+        "NSLocationAlwaysUsageDescription": "Background location usage...",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Background location usage..."
       }
     },
     "android": {
