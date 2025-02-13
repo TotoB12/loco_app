@@ -1894,9 +1894,9 @@ export default ({ config }) => {
         "react-native-radar",
         {
           "iosFraud": false,
-          "iosNSLocationWhenInUseUsageDescription": "We use your location to help share your position in real-time.",
-          "iosNSLocationAlwaysUsageDescription": "Background location is used so your friends can see your location even if the app is closed.",
-          "iosNSLocationAlwaysAndWhenInUseUsageDescription": "Background location is used so your friends can see your location even if the app is closed.",
+          // "iosNSLocationWhenInUseUsageDescription": "We use your location to help share your position in real-time.",
+          // "iosNSLocationAlwaysUsageDescription": "Background location is used so your friends can see your location even if the app is closed.",
+          // "iosNSLocationAlwaysAndWhenInUseUsageDescription": "Background location is used so your friends can see your location even if the app is closed.",
           "iosBackgroundMode": true,
           "androidFraud": false,
           "androidBackgroundPermission": true,
@@ -1937,9 +1937,9 @@ export default ({ config }) => {
           "location",
           "fetch"
         ],
-        "NSLocationWhenInUseUsageDescription": "Show current location on map",
-        "NSLocationAlwaysUsageDescription": "Background location usage...",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Background location usage..."
+        "NSLocationWhenInUseUsageDescription": "We need your location to show your position on the map and share it with friends.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "We need background location access to share your live location with friends, even when the app is in the background or closed.",
+        "NSLocationAlwaysUsageDescription": "We need background location access to share your live location with friends, even when the app is in the background or closed." // Include this for older iOS versions, even though it's deprecated.
       }
     },
     "android": {
@@ -2079,5 +2079,5 @@ app.listen(PORT, () => {
 });
 ```
 
-This setup works, but I've only been developing on Android development builds so far. I just made a build for iOS, but get this: "This ap is missing usage descriptions, so location services will fail. Add one of the `NSLocation*UsageDescription` keys to your bundle's Info.plist.".
-What do I have to do? I know that for Android I need to run `npx expo prebuild --clean` for any big change like that, but is there something that I am missing for iOS?
+This setup works, but I've only been developing on Android development builds so far. I just made a build for iOS, but get this: "This app is missing usage descriptions, so location services will fail. Add one of the `NSLocation*UsageDescription` keys to your bundle's Info.plist.".
+What do I have to do? I know that for Android I need to run `npx expo prebuild --clean` for any big change like that, but is there something that I am missing for iOS? I've already made new development builds with these settings, but no luck.
