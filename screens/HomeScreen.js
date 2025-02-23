@@ -1079,6 +1079,7 @@ export default function HomeScreen() {
             <Modal
               animationType="fade"
               transparent={true}
+              presentationStyle="overFullScreen"
               visible={!!selectedSocialUser}
               onRequestClose={() => setSelectedSocialUser(null)}
             >
@@ -1108,6 +1109,7 @@ export default function HomeScreen() {
             ref={bottomSheetRef}
             index={1}
             snapPoints={snapPoints}
+            enableDynamicSizing={false}
             enablePanDownToClose={false}
             backgroundStyle={{ borderRadius: 20 }}
           >
@@ -1135,6 +1137,7 @@ export default function HomeScreen() {
             ref={userInfoModalRef}
             index={0}
             snapPoints={['32%', '80%']}
+            enableDynamicSizing={false}
             onDismiss={closeUserInfo}
             backgroundStyle={{ borderRadius: 20 }}
           >
