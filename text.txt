@@ -315,6 +315,8 @@ import {
   stopReceivingLocation,
 } from '../sharingUtils';
 
+import { COLORS } from '../colors';
+
 /* -------------------------
    Utility Functions
 ------------------------- */
@@ -1135,7 +1137,7 @@ export default function HomeScreen() {
             <LocationPuck
               topImage="topImage"
               visible={true}
-              scale={['interpolate', ['linear'], ['zoom'], 10, 1.0, 20, 4.0]}
+              // scale={['interpolate', ['linear'], ['zoom'], 10, 1.0, 20, 4.0]}
               pulsing={{
                 isEnabled: true,
                 color: 'teal',
@@ -1434,10 +1436,11 @@ export default function HomeScreen() {
                 </Text>
                 <View style={styles.userInfoButtonsContainer}>
                   <TouchableOpacity style={styles.userInfoButton} onPress={handleToggleShare}>
-                    <Text style={styles.userInfoButtonText}>
+                    <Text style={[styles.userInfoButtonText, { color: userSharingStatus.amSharing ? "red" : COLORS.black }]}>
                       {userSharingStatus.amSharing ? "Stop Sharing My Location" : "Share My Location"}
                     </Text>
                   </TouchableOpacity>
+                  <Divider style={{ width: '100%', marginVertical: 5 }} />
                   {userSharingStatus.amReceiving && (
                     <TouchableOpacity style={styles.userInfoButton} onPress={handleRemoveSharing}>
                       <Text style={styles.userInfoButtonText}>
@@ -1583,10 +1586,10 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   avatarButton: {
-    backgroundColor: '#00ADB5',
+    backgroundColor: COLORS.navy,
     paddingHorizontal: 15,
     paddingVertical: 8,
-    borderRadius: 5,
+    borderRadius: 10,
     marginHorizontal: 5,
   },
   avatarButtonText: {
@@ -1600,7 +1603,7 @@ const styles = StyleSheet.create({
   },
   logoutButton: {
     backgroundColor: '#f54242',
-    borderRadius: 5,
+    borderRadius: 10,
     paddingHorizontal: 15,
     paddingVertical: 10,
   },
@@ -1661,16 +1664,19 @@ const styles = StyleSheet.create({
   userInfoButtonsContainer: {
     flexDirection: 'column',
     justifyContent: 'space-around',
+    padding: 5,
+    backgroundColor: COLORS.white,
+    borderRadius: 10,
   },
   userInfoButton: {
-    backgroundColor: '#00ADB5',
-    padding: 12,
+    // backgroundColor: "red",
+    padding: 5,
     borderRadius: 5,
     marginVertical: 5,
     alignItems: 'center',
   },
   userInfoButtonText: {
-    color: '#fff',
+    color: "red",
     fontSize: 16,
   },
 });
@@ -1894,8 +1900,8 @@ export default ({ config }) => {
         "react-native-radar",
         {
           "iosFraud": false,
-          "iosNSLocationWhenInUseUsageDescription": "We use your location to help share your position in real-time.",
-          "iosNSLocationAlwaysAndWhenInUseUsageDescription": "Background location is used so your friends can see your location even if the app is closed.",
+          // "iosNSLocationWhenInUseUsageDescription": "We use your location to help share your position in real-time.",
+          // "iosNSLocationAlwaysAndWhenInUseUsageDescription": "Background location is used so your friends can see your location even if the app is closed.",
           "iosBackgroundMode": true,
           "androidFraud": false,
           "androidBackgroundPermission": true,
@@ -1907,15 +1913,15 @@ export default ({ config }) => {
         "@rnmapbox/maps",
         {
           "RNMapboxMapsDownloadToken": process.env.MAPBOX_DOWNLOADS_TOKEN,
-          "RNMapboxMapsVersion": "11.0.0"
+          "RNMapboxMapsVersion": "11.8.0"
         }
       ],
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Show current location on map.",
+          // "locationWhenInUsePermission": "Show current location on map.",
           // "locationAlwaysPermission": "Background location usage...",
-          "locationAlwaysAndWhenInUsePermission": "Allow Loco to use your location.",
+          // "locationAlwaysAndWhenInUsePermission": "Allow Loco to use your location.",
           "isIosBackgroundLocationEnabled": true,
           "isAndroidBackgroundLocationEnabled": true
         }
@@ -1941,7 +1947,7 @@ export default ({ config }) => {
         ],
         "NSLocationWhenInUseUsageDescription": "We need your location to show your position on the map and share it with friends.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "We need background location access to share your live location with friends, even when the app is in the background or closed.",
-        // "NSLocationAlwaysUsageDescription": "We need background location access to share your live location with friends, even when the app is in the background or closed." // Include this for older iOS versions, even though it's deprecated.
+        "NSLocationAlwaysUsageDescription": "We need background location access to share your live location with friends, even when the app is in the background or closed." // Include this for older iOS versions, even though it's deprecated.
       }
     },
     "android": {
@@ -2089,5 +2095,4 @@ app.listen(PORT, () => {
 });
 ```
 
-This setup works, but I've only been developing on Android development builds so far. I just made a build for iOS, but get this: "This app is missing usage descriptions, so location services will fail. Add one of the `NSLocation*UsageDescription` keys to your bundle's Info.plist.".
-I know that this is happening because of the command `npx expo prebuild --clean`: it currently properly deletes and recreates my `android` folder, but not my `ios`. Why? Even deleting my current `ios` folder doesnt have it make a new one.
+This setup works, but I've got a few issues on iOS. On Android, the buttons (settings modal, people modal, tracking) are nicely positioned at the top of the page. But on iOS, this has them be underneath the time and battery info of the phone. How can I have it avoid that top bar on iPhone?

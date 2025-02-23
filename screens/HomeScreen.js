@@ -13,6 +13,7 @@ import {
   Alert,
   ActivityIndicator
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../firebaseConfig';
 import { ref, onValue, off, update, get } from 'firebase/database';
@@ -294,6 +295,8 @@ function SharingDialog({ targetUser, sharingStatus, onShare, onStopSharing, onSt
    Main HomeScreen Component
 ------------------------- */
 export default function HomeScreen() {
+  const insets = useSafeAreaInsets();
+
   /* --- Map & location state --- */
   const [currentLocation, setCurrentLocation] = useState(null);
   const cameraRef = useRef(null);
@@ -839,7 +842,7 @@ export default function HomeScreen() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <BottomSheetModalProvider>
-        <View style={styles.container}>
+      <View style={styles.container}>
           {/* Full-screen Map */}
           <MapView
             style={StyleSheet.absoluteFillObject}
@@ -854,10 +857,10 @@ export default function HomeScreen() {
             <LocationPuck
               topImage="topImage"
               visible={true}
-              scale={['interpolate', ['linear'], ['zoom'], 10, 1.0, 20, 4.0]}
+              // scale={['interpolate', ['linear'], ['zoom'], 10, 1.0, 20, 4.0]}
               pulsing={{
                 isEnabled: true,
-                color: 'teal',
+                color: COLORS.navy,
                 radius: 50.0,
               }}
             />
@@ -887,7 +890,7 @@ export default function HomeScreen() {
           </MapView>
 
           {/* Top row with Settings and People buttons */}
-          <View style={styles.topRow}>
+          <View style={[styles.topRow, { top: insets.top }]}>
             <TouchableOpacity style={styles.iconButton} onPress={() => setShowSettings(true)}>
               <MaterialIcons name="settings" size={24} color="black" />
             </TouchableOpacity>
@@ -897,7 +900,7 @@ export default function HomeScreen() {
           </View>
 
           <TouchableOpacity
-            style={[styles.trackButton, tracking && styles.trackButtonActive]}
+            style={[styles.trackButton, { top: insets.top + 54 }, tracking && styles.trackButtonActive]}
             onPress={toggleTracking}
           >
             <MaterialIcons name="my-location" size={24} color={tracking ? '#fff' : '#000'} />
