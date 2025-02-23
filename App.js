@@ -167,7 +167,7 @@ export default function App() {
               desiredStoppedUpdateInterval: 60,
               fastestStoppedUpdateInterval: 60,
               desiredMovingUpdateInterval: 60,
-              fastestMovingUpdateInterval: 30,
+              fastestMovingUpdateInterval: 60,
               desiredSyncInterval: 20,
               desiredAccuracy: "high",
               stopDuration: 140,
