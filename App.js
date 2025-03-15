@@ -164,14 +164,14 @@ export default function App() {
               // mode: 'car'
             },
             trackingOptions: {
-              desiredStoppedUpdateInterval: 60,
+              desiredStoppedUpdateInterval: 120,
               fastestStoppedUpdateInterval: 60,
               desiredMovingUpdateInterval: 60,
-              fastestMovingUpdateInterval: 60,
+              fastestMovingUpdateInterval: 30,
               desiredSyncInterval: 20,
               desiredAccuracy: "high",
               stopDuration: 140,
-              stopDistance: 140,
+              stopDistance: 70,
               replay: "none",
               sync: "all",
               useStoppedGeofence: false,
