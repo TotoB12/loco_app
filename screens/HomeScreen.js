@@ -28,7 +28,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import BottomSheet, { BottomSheetScrollView, BottomSheetModal, BottomSheetModalProvider, BottomSheetView } from '@gorhom/bottom-sheet';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import {showLocation} from 'react-native-map-link';
+import { showLocation } from 'react-native-map-link';
 
 import {
   shareLocation,
@@ -1263,15 +1263,17 @@ export default function HomeScreen() {
                   <LiveTimeAgo timestamp={selectedUserInfo.locationTimestamp} />
                 </Text>
 
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginVertical: 10 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginVertical: 10, alignItems: 'stretch' }}>
                   <TouchableOpacity
                     style={{ flex: 1, marginRight: 5 }}
                     onPress={() => Alert.alert('Notifications', 'This feature is coming soon!')}
                   >
-                    <Card containerStyle={styles.cardOptionContainer}>
-                      <View style={{ alignItems: 'left' }}>
-                        <Icon name="notifications" size={26} color={COLORS.green} />
-                        <Text style={{ marginTop: 5, fontSize: 18, fontWeight: "bold" }}>Notifications</Text>
+                    <Card containerStyle={[styles.cardOptionContainer]}>
+                      <View style={styles.cardContent}>
+                        <View style={[styles.iconCircle, { backgroundColor: COLORS.green }]}>
+                          <Icon name="notifications" size={26} color="white" />
+                        </View>
+                        <Text style={styles.cardTitle}>Notifications</Text>
                       </View>
                     </Card>
                   </TouchableOpacity>
@@ -1280,11 +1282,15 @@ export default function HomeScreen() {
                     style={{ flex: 1, marginLeft: 5 }}
                     onPress={handleDirections}
                   >
-                    <Card containerStyle={styles.cardOptionContainer}>
-                      <View style={{ alignItems: 'left' }}>
-                        <Icon name="directions" size={26} color={COLORS.navy} />
-                        <Text style={{ marginTop: 5, fontSize: 18, fontWeight: "bold" }}>Directions</Text>
-                        <Text style={{ marginTop: 5, fontSize: 12, color: '#888' }}>placeholder</Text>
+                    <Card containerStyle={[styles.cardOptionContainer]}>
+                      <View style={styles.cardContent}>
+                        <View style={[styles.iconCircle, { backgroundColor: COLORS.navy }]}>
+                          <Icon name="directions" size={26} color="white" />
+                        </View>
+                        <View>
+                          <Text style={styles.cardTitle}>Directions</Text>
+                          <Text style={styles.cardSubtitle}>placeholder</Text>
+                        </View>
                       </View>
                     </Card>
                   </TouchableOpacity>
@@ -1530,6 +1536,27 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     borderRadius: 10,
     height: 'auto',
+  },
+  cardContent: {
+    alignItems: 'left',
+  },
+  iconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.black,
+  },
+  cardSubtitle: {
+    marginTop: 5,
+    fontSize: 12,
+    color: '#888',
   },
   userInfoButtonsContainer: {
     // width: '100%',
