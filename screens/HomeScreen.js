@@ -163,8 +163,9 @@ const markerStyles = StyleSheet.create({
 ------------------------- */
 const BottomSheetUserItem = ({ user, currentLocation, onPress }) => {
   return (
+    <View>
     <ListItem
-      bottomDivider
+      // bottomDivider
       containerStyle={{ backgroundColor: 'transparent', paddingLeft: 20, paddingRight: 20 }}
       onPress={onPress}
     >
@@ -180,7 +181,7 @@ const BottomSheetUserItem = ({ user, currentLocation, onPress }) => {
             ? { name: 'person-outline', type: 'material', size: 24 }
             : undefined
         }
-        size={30}
+        size={40}
         containerStyle={
           !user.avatar || !user.avatar.link
             ? { backgroundColor: '#c2c2c2' }
@@ -199,6 +200,8 @@ const BottomSheetUserItem = ({ user, currentLocation, onPress }) => {
         </Text>
       </View>
     </ListItem>
+    <Divider style={{ width: '80%', alignSelf: 'center' }} />
+    </View>
   );
 };
 
@@ -283,6 +286,7 @@ function SharingDialog({ targetUser, sharingStatus, onShare, onStopSharing, onSt
 
   return (
     <View style={SharingStyles.dialogContainer}>
+      <Text style={SharingStyles.dialogTitle}>{userName}</Text>
       <Text style={SharingStyles.dialogMessage}>{message}</Text>
       <View style={SharingStyles.buttonsContainer}>
         {actions.map((action, index) => (
@@ -377,6 +381,15 @@ export default function HomeScreen() {
   // Adjust this percentage based on your bottom sheet’s size.
   const BOTTOM_SHEET_PERCENTAGE = 0.32;
   const bottomInset = screenHeight * BOTTOM_SHEET_PERCENTAGE;
+
+  useEffect(() => {
+    if (!showSocial) {
+      setSearch('');
+      setExpanded1(false);
+      setExpanded2(true);
+    }
+  }, [showSocial]);
+
 
   /* --- Mapbox setup --- */
   useEffect(() => {
@@ -843,7 +856,14 @@ export default function HomeScreen() {
   /* --- Reverse geocoding for user info modal --- */
   const fetchReverseGeocode = async (lat, lon) => {
     try {
-      const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`,
+        {
+          headers: {
+            'User-Agent': 'loco_app/1.0 (loco@totob12.com)'
+          }
+        }
+      );
       const data = await response.json();
       if (data && data.display_name) {
         setSelectedUserLocationName(data.display_name);
@@ -1085,16 +1105,19 @@ export default function HomeScreen() {
                   <MaterialIcons name="close" size={28} color="#000" />
                 </TouchableOpacity>
               </View>
-              <ScrollView style={styles.modalContent} contentContainerStyle={styles.modalScroll}>
+              <View style={styles.searchContainer}>
                 <SearchBar
                   placeholder="Search..."
                   onChangeText={setSearch}
                   value={search}
                   platform="default"
-                  containerStyle={styles.searchContainer}
+                  containerStyle={{ backgroundColor: 'transparent', borderTopWidth: 0, borderBottomWidth: 0 }}
                   inputContainerStyle={styles.searchInputContainer}
                   inputStyle={styles.searchInput}
                 />
+              </View>
+
+              <ScrollView style={styles.modalContent} contentContainerStyle={styles.modalScroll}>
                 {search.trim().length > 0 ? (
                   <>
                     {searchResults.length > 0 ? (
@@ -1182,6 +1205,7 @@ export default function HomeScreen() {
             <View style={styles.bottomSheetHeader}>
               <Text style={styles.bottomSheetTitle}>People</Text>
             </View>
+            <Divider style={{ width: '100%' }} />
             <BottomSheetScrollView contentContainerStyle={styles.bottomSheetContent}>
               {Object.values(receivingFromData).length > 0 ? (
                 Object.values(receivingFromData).map((user) => (
@@ -1352,11 +1376,7 @@ const styles = StyleSheet.create({
     marginTop: 15,
   },
   searchContainer: {
-    backgroundColor: 'transparent',
-    borderTopWidth: 0,
-    borderBottomWidth: 0,
-    paddingHorizontal: 0,
-    marginBottom: 20,
+    paddingHorizontal: 10,
   },
   searchInputContainer: {
     backgroundColor: '#eee',
@@ -1403,6 +1423,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   bottomSheetHeader: {
+    paddingBottom: 14,
     paddingLeft: 20,
   },
   bottomSheetTitle: {
@@ -1495,25 +1516,24 @@ const dialogStyles = StyleSheet.create({
     bottom: 0,
   },
   dialogBox: {
-    backgroundColor: '#fff',
     borderRadius: 8,
-    padding: 20,
-    marginHorizontal: 20,
     width: '80%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
   },
 });
 
 const SharingStyles = StyleSheet.create({
   dialogContainer: {
-    backgroundColor: '#fff',
+    backgroundColor: COLORS.white,
     padding: 20,
     borderRadius: 8,
     alignItems: 'stretch',
+  },
+  dialogTitle: {
+    alignSelf: 'center',
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.black,
+    marginBottom: 10,
   },
   dialogMessage: {
     fontSize: 16,

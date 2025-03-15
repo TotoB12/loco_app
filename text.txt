@@ -446,8 +446,9 @@ const markerStyles = StyleSheet.create({
 ------------------------- */
 const BottomSheetUserItem = ({ user, currentLocation, onPress }) => {
   return (
+    <View>
     <ListItem
-      bottomDivider
+      // bottomDivider
       containerStyle={{ backgroundColor: 'transparent', paddingLeft: 20, paddingRight: 20 }}
       onPress={onPress}
     >
@@ -463,7 +464,7 @@ const BottomSheetUserItem = ({ user, currentLocation, onPress }) => {
             ? { name: 'person-outline', type: 'material', size: 24 }
             : undefined
         }
-        size={30}
+        size={40}
         containerStyle={
           !user.avatar || !user.avatar.link
             ? { backgroundColor: '#c2c2c2' }
@@ -482,6 +483,8 @@ const BottomSheetUserItem = ({ user, currentLocation, onPress }) => {
         </Text>
       </View>
     </ListItem>
+    <Divider style={{ width: '80%', alignSelf: 'center' }} />
+    </View>
   );
 };
 
@@ -566,6 +569,7 @@ function SharingDialog({ targetUser, sharingStatus, onShare, onStopSharing, onSt
 
   return (
     <View style={SharingStyles.dialogContainer}>
+      <Text style={SharingStyles.dialogTitle}>{userName}</Text>
       <Text style={SharingStyles.dialogMessage}>{message}</Text>
       <View style={SharingStyles.buttonsContainer}>
         {actions.map((action, index) => (
@@ -660,6 +664,15 @@ export default function HomeScreen() {
   // Adjust this percentage based on your bottom sheet’s size.
   const BOTTOM_SHEET_PERCENTAGE = 0.32;
   const bottomInset = screenHeight * BOTTOM_SHEET_PERCENTAGE;
+
+  useEffect(() => {
+    if (!showSocial) {
+      setSearch('');
+      setExpanded1(false);
+      setExpanded2(true);
+    }
+  }, [showSocial]);
+
 
   /* --- Mapbox setup --- */
   useEffect(() => {
@@ -1126,7 +1139,14 @@ export default function HomeScreen() {
   /* --- Reverse geocoding for user info modal --- */
   const fetchReverseGeocode = async (lat, lon) => {
     try {
-      const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`,
+        {
+          headers: {
+            'User-Agent': 'loco_app/1.0 (loco@totob12.com)'
+          }
+        }
+      );
       const data = await response.json();
       if (data && data.display_name) {
         setSelectedUserLocationName(data.display_name);
@@ -1368,16 +1388,19 @@ export default function HomeScreen() {
                   <MaterialIcons name="close" size={28} color="#000" />
                 </TouchableOpacity>
               </View>
-              <ScrollView style={styles.modalContent} contentContainerStyle={styles.modalScroll}>
+              <View style={styles.searchContainer}>
                 <SearchBar
                   placeholder="Search..."
                   onChangeText={setSearch}
                   value={search}
                   platform="default"
-                  containerStyle={styles.searchContainer}
+                  containerStyle={{ backgroundColor: 'transparent', borderTopWidth: 0, borderBottomWidth: 0 }}
                   inputContainerStyle={styles.searchInputContainer}
                   inputStyle={styles.searchInput}
                 />
+              </View>
+
+              <ScrollView style={styles.modalContent} contentContainerStyle={styles.modalScroll}>
                 {search.trim().length > 0 ? (
                   <>
                     {searchResults.length > 0 ? (
@@ -1465,6 +1488,7 @@ export default function HomeScreen() {
             <View style={styles.bottomSheetHeader}>
               <Text style={styles.bottomSheetTitle}>People</Text>
             </View>
+            <Divider style={{ width: '100%' }} />
             <BottomSheetScrollView contentContainerStyle={styles.bottomSheetContent}>
               {Object.values(receivingFromData).length > 0 ? (
                 Object.values(receivingFromData).map((user) => (
@@ -1635,11 +1659,7 @@ const styles = StyleSheet.create({
     marginTop: 15,
   },
   searchContainer: {
-    backgroundColor: 'transparent',
-    borderTopWidth: 0,
-    borderBottomWidth: 0,
-    paddingHorizontal: 0,
-    marginBottom: 20,
+    paddingHorizontal: 10,
   },
   searchInputContainer: {
     backgroundColor: '#eee',
@@ -1686,6 +1706,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   bottomSheetHeader: {
+    paddingBottom: 14,
     paddingLeft: 20,
   },
   bottomSheetTitle: {
@@ -1778,25 +1799,24 @@ const dialogStyles = StyleSheet.create({
     bottom: 0,
   },
   dialogBox: {
-    backgroundColor: '#fff',
     borderRadius: 8,
-    padding: 20,
-    marginHorizontal: 20,
     width: '80%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
   },
 });
 
 const SharingStyles = StyleSheet.create({
   dialogContainer: {
-    backgroundColor: '#fff',
+    backgroundColor: COLORS.white,
     padding: 20,
     borderRadius: 8,
     alignItems: 'stretch',
+  },
+  dialogTitle: {
+    alignSelf: 'center',
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.black,
+    marginBottom: 10,
   },
   dialogMessage: {
     fontSize: 16,
@@ -2218,4 +2238,158 @@ app.listen(PORT, () => {
 });
 ```
 
-This setup works, but I need to fix a few things. On the "People" modal, the search bar should not be part of the scrollable content, and shoult remain locked in place.
+This setup works, but I need to fix a few things. In the user info bottom sheet modal, I want to add a section before the buttons. This section should show two "cards" side by side, presenting two features: Notifications and Directions. Both should have the same design and shape: first an icon, then the name ("Notifications" or "Directions"). When the Notification card is pressed, the app should just show a native os alert saying "Coming soon!". When the Directions card is pressed, the app should open the default navigation app to that user's latest location.
+I want you to fully develop and implement this. Here is some documentation to help:
+
+```
+Card
+Cards are a great way to display information, usually containing content and actions about a single subject. Cards can contain images, buttons, text and more. Cards are mainly used for informative purpose.
+
+Usage
+Import
+import { Card } from '@rneui/themed';
+
+Theme Key 
+Card
+
+```javascript
+import React from 'react';
+import { View, ScrollView, StyleSheet, Image } from 'react-native';
+import { Text, Card, Button, Icon } from '@rneui/themed';
+
+const users = [
+{
+  name: 'brynn',
+  avatar: 'https://uifaces.co/our-content/donated/1H_7AxP0.jpg',
+},
+{
+  name: 'thot leader',
+  avatar:
+    'https://images.pexels.com/photos/598745/pexels-photo-598745.jpeg?crop=faces&fit=crop&h=200&w=200&auto=compress&cs=tinysrgb',
+},
+{
+  name: 'jsa',
+  avatar: 'https://uifaces.co/our-content/donated/bUkmHPKs.jpg',
+},
+{
+  name: 'talhaconcepts',
+  avatar: 'https://randomuser.me/api/portraits/men/4.jpg',
+},
+{
+  name: 'andy vitale',
+  avatar: 'https://uifaces.co/our-content/donated/NY9hnAbp.jpg',
+},
+{
+  name: 'katy friedson',
+  avatar:
+    'https://images-na.ssl-images-amazon.com/images/M/MV5BMTgxMTc1MTYzM15BMl5BanBnXkFtZTgwNzI5NjMwOTE@._V1_UY256_CR16,0,172,256_AL_.jpg',
+},
+];
+
+type CardsComponentsProps = {};
+
+const Cards: React.FunctionComponent<CardsComponentsProps> = () => {
+return (
+  <>
+    <ScrollView>
+      <View style={styles.container}>
+        <Card>
+          <Card.Title>CARD WITH DIVIDER</Card.Title>
+          <Card.Divider />
+          {users.map((u, i) => {
+            return (
+              <View key={i} style={styles.user}>
+                <Image
+                  style={styles.image}
+                  resizeMode="cover"
+                  source={{ uri: u.avatar }}
+                />
+                <Text style={styles.name}>{u.name}</Text>
+              </View>
+            );
+          })}
+        </Card>
+        <Card containerStyle={{ marginTop: 15 }}>
+          <Card.Title>FONTS</Card.Title>
+          <Card.Divider />
+          <Text style={styles.fonts} h1>
+            h1 Heading
+          </Text>
+          <Text style={styles.fonts} h2>
+            h2 Heading
+          </Text>
+          <Text style={styles.fonts} h3>
+            h3 Heading
+          </Text>
+          <Text style={styles.fonts} h4>
+            h4 Heading
+          </Text>
+          <Text style={styles.fonts}>Normal Text</Text>
+        </Card>
+        <Card>
+          <Card.Title>HELLO WORLD</Card.Title>
+          <Card.Divider />
+          <Card.Image
+            style={{ padding: 0 }}
+            source={{
+              uri:
+                'https://awildgeographer.files.wordpress.com/2015/02/john_muir_glacier.jpg',
+            }}
+          />
+          <Text style={{ marginBottom: 10 }}>
+            The idea with React Native Elements is more about component
+            structure than actual design.
+          </Text>
+          <Button
+            icon={
+              <Icon
+                name="code"
+                color="#ffffff"
+                iconStyle={{ marginRight: 10 }}
+              />
+            }
+            buttonStyle={{
+              borderRadius: 0,
+              marginLeft: 0,
+              marginRight: 0,
+              marginBottom: 0,
+            }}
+            title="VIEW NOW"
+          />
+        </Card>
+      </View>
+    </ScrollView>
+  </>
+);
+};
+
+const styles = StyleSheet.create({
+container: {
+  flex: 1,
+},
+fonts: {
+  marginBottom: 8,
+},
+user: {
+  flexDirection: 'row',
+  marginBottom: 6,
+},
+image: {
+  width: 30,
+  height: 30,
+  marginRight: 10,
+},
+name: {
+  fontSize: 16,
+  marginTop: 5,
+},
+});
+
+export default Cards;
+```
+
+Props
+Name	Type	Default	Description
+containerStyle	View Style		Outer container style.
+wrapperStyle	View Style		Inner container style.
+```
