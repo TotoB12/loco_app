@@ -1264,11 +1264,10 @@ export default function HomeScreen() {
                 </Text>
 
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginVertical: 10, alignItems: 'stretch' }}>
-                  <TouchableOpacity
-                    style={{ flex: 1, marginRight: 5 }}
+                  <TouchableOpacity style={{ flex: 1, marginRight: 5 }}
                     onPress={() => Alert.alert('Notifications', 'This feature is coming soon!')}
                   >
-                    <Card containerStyle={[styles.cardOptionContainer]}>
+                    <Card containerStyle={[styles.cardOptionContainer, { flex: 1 }]}>
                       <View style={styles.cardContent}>
                         <View style={[styles.iconCircle, { backgroundColor: COLORS.green }]}>
                           <Icon name="notifications" size={26} color="white" />
@@ -1278,11 +1277,8 @@ export default function HomeScreen() {
                     </Card>
                   </TouchableOpacity>
 
-                  <TouchableOpacity
-                    style={{ flex: 1, marginLeft: 5 }}
-                    onPress={handleDirections}
-                  >
-                    <Card containerStyle={[styles.cardOptionContainer]}>
+                  <TouchableOpacity style={{ flex: 1, marginLeft: 5 }} onPress={handleDirections}>
+                    <Card containerStyle={[styles.cardOptionContainer, { flex: 1 }]}>
                       <View style={styles.cardContent}>
                         <View style={[styles.iconCircle, { backgroundColor: COLORS.navy }]}>
                           <Icon name="directions" size={26} color="white" />
@@ -1549,7 +1545,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   cardTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
     color: COLORS.black,
   },

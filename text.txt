@@ -306,11 +306,12 @@ import Radar from 'react-native-radar';
 import Mapbox, { MapView, LocationPuck, MarkerView, Camera, UserTrackingMode } from '@rnmapbox/maps';
 import { MaterialIcons } from '@expo/vector-icons';
 import { FontAwesome5 } from '@expo/vector-icons';
-import { SearchBar, ListItem, Divider, Avatar } from '@rneui/themed';
+import { SearchBar, ListItem, Divider, Avatar, Card, Icon } from '@rneui/themed';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import BottomSheet, { BottomSheetScrollView, BottomSheetModal, BottomSheetModalProvider, BottomSheetView } from '@gorhom/bottom-sheet';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { showLocation } from 'react-native-map-link';
 
 import {
   shareLocation,
@@ -447,43 +448,43 @@ const markerStyles = StyleSheet.create({
 const BottomSheetUserItem = ({ user, currentLocation, onPress }) => {
   return (
     <View>
-    <ListItem
-      // bottomDivider
-      containerStyle={{ backgroundColor: 'transparent', paddingLeft: 20, paddingRight: 20 }}
-      onPress={onPress}
-    >
-      <Avatar
-        rounded
-        source={
-          user.avatar && user.avatar.link
-            ? { uri: user.avatar.link }
-            : { uri: "data:image/png" }
-        }
-        icon={
-          !user.avatar || !user.avatar.link
-            ? { name: 'person-outline', type: 'material', size: 24 }
-            : undefined
-        }
-        size={40}
-        containerStyle={
-          !user.avatar || !user.avatar.link
-            ? { backgroundColor: '#c2c2c2' }
-            : {}
-        }
-      />
-      <View style={{ flex: 1 }}>
-        <View style={styles.userItemHeader}>
-          <Text style={styles.userNameText}>
-            {(`${user.firstName || ''} ${user.lastName || ''}`).trim()}
+      <ListItem
+        // bottomDivider
+        containerStyle={{ backgroundColor: 'transparent', paddingLeft: 20, paddingRight: 20 }}
+        onPress={onPress}
+      >
+        <Avatar
+          rounded
+          source={
+            user.avatar && user.avatar.link
+              ? { uri: user.avatar.link }
+              : { uri: "data:image/png" }
+          }
+          icon={
+            !user.avatar || !user.avatar.link
+              ? { name: 'person-outline', type: 'material', size: 24 }
+              : undefined
+          }
+          size={40}
+          containerStyle={
+            !user.avatar || !user.avatar.link
+              ? { backgroundColor: '#c2c2c2' }
+              : {}
+          }
+        />
+        <View style={{ flex: 1 }}>
+          <View style={styles.userItemHeader}>
+            <Text style={styles.userNameText}>
+              {(`${user.firstName || ''} ${user.lastName || ''}`).trim()}
+            </Text>
+            <LiveDistance currentLocation={currentLocation} userLocation={user.location} />
+          </View>
+          <Text style={styles.timestampText}>
+            <LiveTimeAgo timestamp={user.locationTimestamp} />
           </Text>
-          <LiveDistance currentLocation={currentLocation} userLocation={user.location} />
         </View>
-        <Text style={styles.timestampText}>
-          <LiveTimeAgo timestamp={user.locationTimestamp} />
-        </Text>
-      </View>
-    </ListItem>
-    <Divider style={{ width: '80%', alignSelf: 'center' }} />
+      </ListItem>
+      <Divider style={{ width: '80%', alignSelf: 'center' }} />
     </View>
   );
 };
@@ -1196,6 +1197,18 @@ export default function HomeScreen() {
     }
     : { amSharing: false, amReceiving: false };
 
+  /* --- Handlers for sharing options dialog in People modal --- */
+  const handleDirections = () => {
+    if (!selectedUserInfo || !selectedUserInfo.location) return;
+    const { latitude, longitude } = selectedUserInfo.location;
+    showLocation({
+      latitude: latitude,
+      longitude: longitude,
+      title: `${selectedUserInfo.firstName || 'User'} ${selectedUserInfo.lastName || ''}`,
+      dialogTitle: 'This is the dialog Title',
+    });
+  };
+
   /* -------------------------
      Render
   ------------------------- */
@@ -1517,7 +1530,7 @@ export default function HomeScreen() {
             backgroundStyle={{ borderRadius: 20 }}
           >
             {selectedUserInfo && (
-              <BottomSheetView style={{ paddingLeft: 20, paddingRight: 20 }}>
+              <BottomSheetScrollView style={{ paddingLeft: 20, paddingRight: 20 }}>
                 <View style={styles.userInfoHeader}>
                   <Text style={styles.userInfoName}>
                     {(`${selectedUserInfo.firstName || ''} ${selectedUserInfo.lastName || ''}`).trim()}
@@ -1532,6 +1545,36 @@ export default function HomeScreen() {
                 <Text style={styles.userInfoTimestamp}>
                   <LiveTimeAgo timestamp={selectedUserInfo.locationTimestamp} />
                 </Text>
+
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginVertical: 10, alignItems: 'stretch' }}>
+                  <TouchableOpacity style={{ flex: 1, marginRight: 5 }}
+                    onPress={() => Alert.alert('Notifications', 'This feature is coming soon!')}
+                  >
+                    <Card containerStyle={[styles.cardOptionContainer, { flex: 1 }]}>
+                      <View style={styles.cardContent}>
+                        <View style={[styles.iconCircle, { backgroundColor: COLORS.green }]}>
+                          <Icon name="notifications" size={26} color="white" />
+                        </View>
+                        <Text style={styles.cardTitle}>Notifications</Text>
+                      </View>
+                    </Card>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={{ flex: 1, marginLeft: 5 }} onPress={handleDirections}>
+                    <Card containerStyle={[styles.cardOptionContainer, { flex: 1 }]}>
+                      <View style={styles.cardContent}>
+                        <View style={[styles.iconCircle, { backgroundColor: COLORS.navy }]}>
+                          <Icon name="directions" size={26} color="white" />
+                        </View>
+                        <View>
+                          <Text style={styles.cardTitle}>Directions</Text>
+                          <Text style={styles.cardSubtitle}>placeholder</Text>
+                        </View>
+                      </View>
+                    </Card>
+                  </TouchableOpacity>
+                </View>
+
                 <View style={styles.userInfoButtonsContainer}>
                   <TouchableOpacity style={styles.userInfoButton} onPress={handleToggleShare}>
                     <Text style={[styles.userInfoButtonText, { color: userSharingStatus.amSharing ? "red" : COLORS.black }]}>
@@ -1547,7 +1590,7 @@ export default function HomeScreen() {
                     </TouchableOpacity>
                   )}
                 </View>
-              </BottomSheetView>
+              </BottomSheetScrollView>
             )}
           </BottomSheetModal>
         </View>
@@ -1766,9 +1809,36 @@ const styles = StyleSheet.create({
     color: '#555',
     marginBottom: 15,
   },
+  cardOptionContainer: {
+    width: '100%',
+    margin: 0,
+    backgroundColor: COLORS.white,
+    borderRadius: 10,
+    height: 'auto',
+  },
+  cardContent: {
+    alignItems: 'left',
+  },
+  iconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: COLORS.black,
+  },
+  cardSubtitle: {
+    marginTop: 5,
+    fontSize: 12,
+    color: '#888',
+  },
   userInfoButtonsContainer: {
-    flexDirection: 'column',
-    justifyContent: 'space-around',
+    // width: '100%',
     padding: 5,
     backgroundColor: COLORS.white,
     borderRadius: 10,
@@ -2059,7 +2129,8 @@ export default ({ config }) => {
           "image": "./assets/splash.png",
           "imageWidth": 200
         }
-      ]
+      ],
+      ["react-native-map-link"]
     ],
     "ios": {
       "buildNumber": "0.1.5",
@@ -2238,158 +2309,4 @@ app.listen(PORT, () => {
 });
 ```
 
-This setup works, but I need to fix a few things. In the user info bottom sheet modal, I want to add a section before the buttons. This section should show two "cards" side by side, presenting two features: Notifications and Directions. Both should have the same design and shape: first an icon, then the name ("Notifications" or "Directions"). When the Notification card is pressed, the app should just show a native os alert saying "Coming soon!". When the Directions card is pressed, the app should open the default navigation app to that user's latest location.
-I want you to fully develop and implement this. Here is some documentation to help:
-
-```
-Card
-Cards are a great way to display information, usually containing content and actions about a single subject. Cards can contain images, buttons, text and more. Cards are mainly used for informative purpose.
-
-Usage
-Import
-import { Card } from '@rneui/themed';
-
-Theme Key 
-Card
-
-```javascript
-import React from 'react';
-import { View, ScrollView, StyleSheet, Image } from 'react-native';
-import { Text, Card, Button, Icon } from '@rneui/themed';
-
-const users = [
-{
-  name: 'brynn',
-  avatar: 'https://uifaces.co/our-content/donated/1H_7AxP0.jpg',
-},
-{
-  name: 'thot leader',
-  avatar:
-    'https://images.pexels.com/photos/598745/pexels-photo-598745.jpeg?crop=faces&fit=crop&h=200&w=200&auto=compress&cs=tinysrgb',
-},
-{
-  name: 'jsa',
-  avatar: 'https://uifaces.co/our-content/donated/bUkmHPKs.jpg',
-},
-{
-  name: 'talhaconcepts',
-  avatar: 'https://randomuser.me/api/portraits/men/4.jpg',
-},
-{
-  name: 'andy vitale',
-  avatar: 'https://uifaces.co/our-content/donated/NY9hnAbp.jpg',
-},
-{
-  name: 'katy friedson',
-  avatar:
-    'https://images-na.ssl-images-amazon.com/images/M/MV5BMTgxMTc1MTYzM15BMl5BanBnXkFtZTgwNzI5NjMwOTE@._V1_UY256_CR16,0,172,256_AL_.jpg',
-},
-];
-
-type CardsComponentsProps = {};
-
-const Cards: React.FunctionComponent<CardsComponentsProps> = () => {
-return (
-  <>
-    <ScrollView>
-      <View style={styles.container}>
-        <Card>
-          <Card.Title>CARD WITH DIVIDER</Card.Title>
-          <Card.Divider />
-          {users.map((u, i) => {
-            return (
-              <View key={i} style={styles.user}>
-                <Image
-                  style={styles.image}
-                  resizeMode="cover"
-                  source={{ uri: u.avatar }}
-                />
-                <Text style={styles.name}>{u.name}</Text>
-              </View>
-            );
-          })}
-        </Card>
-        <Card containerStyle={{ marginTop: 15 }}>
-          <Card.Title>FONTS</Card.Title>
-          <Card.Divider />
-          <Text style={styles.fonts} h1>
-            h1 Heading
-          </Text>
-          <Text style={styles.fonts} h2>
-            h2 Heading
-          </Text>
-          <Text style={styles.fonts} h3>
-            h3 Heading
-          </Text>
-          <Text style={styles.fonts} h4>
-            h4 Heading
-          </Text>
-          <Text style={styles.fonts}>Normal Text</Text>
-        </Card>
-        <Card>
-          <Card.Title>HELLO WORLD</Card.Title>
-          <Card.Divider />
-          <Card.Image
-            style={{ padding: 0 }}
-            source={{
-              uri:
-                'https://awildgeographer.files.wordpress.com/2015/02/john_muir_glacier.jpg',
-            }}
-          />
-          <Text style={{ marginBottom: 10 }}>
-            The idea with React Native Elements is more about component
-            structure than actual design.
-          </Text>
-          <Button
-            icon={
-              <Icon
-                name="code"
-                color="#ffffff"
-                iconStyle={{ marginRight: 10 }}
-              />
-            }
-            buttonStyle={{
-              borderRadius: 0,
-              marginLeft: 0,
-              marginRight: 0,
-              marginBottom: 0,
-            }}
-            title="VIEW NOW"
-          />
-        </Card>
-      </View>
-    </ScrollView>
-  </>
-);
-};
-
-const styles = StyleSheet.create({
-container: {
-  flex: 1,
-},
-fonts: {
-  marginBottom: 8,
-},
-user: {
-  flexDirection: 'row',
-  marginBottom: 6,
-},
-image: {
-  width: 30,
-  height: 30,
-  marginRight: 10,
-},
-name: {
-  fontSize: 16,
-  marginTop: 5,
-},
-});
-
-export default Cards;
-```
-
-Props
-Name	Type	Default	Description
-containerStyle	View Style		Outer container style.
-wrapperStyle	View Style		Inner container style.
-```
+This setup works, but I need to fix a few things. In the user info bottom sheet modal, I want to replace the "placeholder" text inside the Directions card with the distance to that user from myself (as shown in the user list in the main bottom sheet). I want you to fully develop and implement this.
