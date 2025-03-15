@@ -11,7 +11,8 @@ import {
   SafeAreaView,
   ScrollView,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  Animated
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { signOut } from 'firebase/auth';
@@ -333,6 +334,20 @@ export default function HomeScreen() {
   const [selectedUserLocationName, setSelectedUserLocationName] = useState("");
   // These sharing status objects are computed in real time
   const [userSharingStatus, setUserSharingStatus] = useState({ amSharing: false, amReceiving: false });
+
+  // Animated fade for the People modal sharing options dialog
+  const [fadeAnim] = useState(new Animated.Value(0)); // Starts at 0 (fully transparent)
+  useEffect(() => {
+    if (selectedSocialUser) {
+      Animated.timing(fadeAnim, {
+        toValue: 1, // Fade to fully opaque
+        duration: 100, // Animation duration in milliseconds
+        useNativeDriver: true, // Better performance
+      }).start();
+    } else {
+      fadeAnim.setValue(0); // Reset to transparent when dialog closes
+    }
+  }, [selectedSocialUser]);
 
   /* --- Mapbox setup --- */
   useEffect(() => {
@@ -842,7 +857,7 @@ export default function HomeScreen() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <BottomSheetModalProvider>
-      <View style={styles.container}>
+        <View style={styles.container}>
           {/* Full-screen Map */}
           <MapView
             style={StyleSheet.absoluteFillObject}
@@ -983,6 +998,35 @@ export default function HomeScreen() {
             onRequestClose={() => setShowSocial(false)}
           >
             <SafeAreaView style={styles.modalContainer}>
+
+              {/* ------------- Sharing Options Modal (for People modal items) ------------- */}
+              {selectedSocialUser && (
+                <Animated.View style={[dialogStyles.overlay, { opacity: fadeAnim }]}>
+                  <TouchableOpacity
+                    style={dialogStyles.overlay}
+                    onPress={() => setSelectedSocialUser(null)}
+                    activeOpacity={1}
+                  >
+                    <View style={dialogStyles.dialogBox} onStartShouldSetResponder={() => true}>
+                      <SharingDialog
+                        targetUser={selectedSocialUser}
+                        sharingStatus={socialUserSharingStatus}
+                        onShare={async () => {
+                          await shareLocation(auth.currentUser.uid, selectedSocialUser.uid);
+                        }}
+                        onStopSharing={async () => {
+                          await stopSharingLocation(auth.currentUser.uid, selectedSocialUser.uid);
+                        }}
+                        onStopReceiving={async () => {
+                          await stopReceivingLocation(auth.currentUser.uid, selectedSocialUser.uid);
+                        }}
+                        onClose={() => setSelectedSocialUser(null)}
+                      />
+                    </View>
+                  </TouchableOpacity>
+                  </Animated.View>
+              )}
+
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>People</Text>
                 <TouchableOpacity onPress={() => setShowSocial(false)}>
@@ -1073,36 +1117,6 @@ export default function HomeScreen() {
               </ScrollView>
             </SafeAreaView>
           </Modal>
-
-          {/* ------------- Sharing Options Modal (for People modal items) ------------- */}
-          {selectedSocialUser && (
-            <Modal
-              animationType="fade"
-              transparent={true}
-              presentationStyle="overFullScreen"
-              visible={!!selectedSocialUser}
-              onRequestClose={() => setSelectedSocialUser(null)}
-            >
-              <View style={dialogStyles.overlay}>
-                <View style={dialogStyles.dialogBox}>
-                  <SharingDialog
-                    targetUser={selectedSocialUser}
-                    sharingStatus={socialUserSharingStatus}
-                    onShare={async () => {
-                      await shareLocation(auth.currentUser.uid, selectedSocialUser.uid);
-                    }}
-                    onStopSharing={async () => {
-                      await stopSharingLocation(auth.currentUser.uid, selectedSocialUser.uid);
-                    }}
-                    onStopReceiving={async () => {
-                      await stopReceivingLocation(auth.currentUser.uid, selectedSocialUser.uid);
-                    }}
-                    onClose={() => setSelectedSocialUser(null)}
-                  />
-                </View>
-              </View>
-            </Modal>
-          )}
 
           {/* ------------- Main Bottom Sheet (for users sharing with you) ------------- */}
           <BottomSheet
@@ -1406,10 +1420,16 @@ const styles = StyleSheet.create({
 
 const dialogStyles = StyleSheet.create({
   overlay: {
-    flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 1000,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   dialogBox: {
     backgroundColor: '#fff',

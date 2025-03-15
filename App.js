@@ -166,8 +166,8 @@ export default function App() {
             trackingOptions: {
               desiredStoppedUpdateInterval: 120,
               fastestStoppedUpdateInterval: 60,
-              desiredMovingUpdateInterval: 60,
-              fastestMovingUpdateInterval: 30,
+              desiredMovingUpdateInterval: 30,
+              fastestMovingUpdateInterval: 15,
               desiredSyncInterval: 20,
               desiredAccuracy: "high",
               stopDuration: 140,

@@ -173,8 +173,8 @@ export default function App() {
             trackingOptions: {
               desiredStoppedUpdateInterval: 120,
               fastestStoppedUpdateInterval: 60,
-              desiredMovingUpdateInterval: 60,
-              fastestMovingUpdateInterval: 30,
+              desiredMovingUpdateInterval: 30,
+              fastestMovingUpdateInterval: 15,
               desiredSyncInterval: 20,
               desiredAccuracy: "high",
               stopDuration: 140,
@@ -294,7 +294,8 @@ import {
   SafeAreaView,
   ScrollView,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  Animated
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { signOut } from 'firebase/auth';
@@ -616,6 +617,20 @@ export default function HomeScreen() {
   const [selectedUserLocationName, setSelectedUserLocationName] = useState("");
   // These sharing status objects are computed in real time
   const [userSharingStatus, setUserSharingStatus] = useState({ amSharing: false, amReceiving: false });
+
+  // Animated fade for the People modal sharing options dialog
+  const [fadeAnim] = useState(new Animated.Value(0)); // Starts at 0 (fully transparent)
+  useEffect(() => {
+    if (selectedSocialUser) {
+      Animated.timing(fadeAnim, {
+        toValue: 1, // Fade to fully opaque
+        duration: 100, // Animation duration in milliseconds
+        useNativeDriver: true, // Better performance
+      }).start();
+    } else {
+      fadeAnim.setValue(0); // Reset to transparent when dialog closes
+    }
+  }, [selectedSocialUser]);
 
   /* --- Mapbox setup --- */
   useEffect(() => {
@@ -1125,7 +1140,7 @@ export default function HomeScreen() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <BottomSheetModalProvider>
-      <View style={styles.container}>
+        <View style={styles.container}>
           {/* Full-screen Map */}
           <MapView
             style={StyleSheet.absoluteFillObject}
@@ -1266,6 +1281,35 @@ export default function HomeScreen() {
             onRequestClose={() => setShowSocial(false)}
           >
             <SafeAreaView style={styles.modalContainer}>
+
+              {/* ------------- Sharing Options Modal (for People modal items) ------------- */}
+              {selectedSocialUser && (
+                <Animated.View style={[dialogStyles.overlay, { opacity: fadeAnim }]}>
+                  <TouchableOpacity
+                    style={dialogStyles.overlay}
+                    onPress={() => setSelectedSocialUser(null)}
+                    activeOpacity={1}
+                  >
+                    <View style={dialogStyles.dialogBox} onStartShouldSetResponder={() => true}>
+                      <SharingDialog
+                        targetUser={selectedSocialUser}
+                        sharingStatus={socialUserSharingStatus}
+                        onShare={async () => {
+                          await shareLocation(auth.currentUser.uid, selectedSocialUser.uid);
+                        }}
+                        onStopSharing={async () => {
+                          await stopSharingLocation(auth.currentUser.uid, selectedSocialUser.uid);
+                        }}
+                        onStopReceiving={async () => {
+                          await stopReceivingLocation(auth.currentUser.uid, selectedSocialUser.uid);
+                        }}
+                        onClose={() => setSelectedSocialUser(null)}
+                      />
+                    </View>
+                  </TouchableOpacity>
+                  </Animated.View>
+              )}
+
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>People</Text>
                 <TouchableOpacity onPress={() => setShowSocial(false)}>
@@ -1356,36 +1400,6 @@ export default function HomeScreen() {
               </ScrollView>
             </SafeAreaView>
           </Modal>
-
-          {/* ------------- Sharing Options Modal (for People modal items) ------------- */}
-          {selectedSocialUser && (
-            <Modal
-              animationType="fade"
-              transparent={true}
-              presentationStyle="overFullScreen"
-              visible={!!selectedSocialUser}
-              onRequestClose={() => setSelectedSocialUser(null)}
-            >
-              <View style={dialogStyles.overlay}>
-                <View style={dialogStyles.dialogBox}>
-                  <SharingDialog
-                    targetUser={selectedSocialUser}
-                    sharingStatus={socialUserSharingStatus}
-                    onShare={async () => {
-                      await shareLocation(auth.currentUser.uid, selectedSocialUser.uid);
-                    }}
-                    onStopSharing={async () => {
-                      await stopSharingLocation(auth.currentUser.uid, selectedSocialUser.uid);
-                    }}
-                    onStopReceiving={async () => {
-                      await stopReceivingLocation(auth.currentUser.uid, selectedSocialUser.uid);
-                    }}
-                    onClose={() => setSelectedSocialUser(null)}
-                  />
-                </View>
-              </View>
-            </Modal>
-          )}
 
           {/* ------------- Main Bottom Sheet (for users sharing with you) ------------- */}
           <BottomSheet
@@ -1689,10 +1703,16 @@ const styles = StyleSheet.create({
 
 const dialogStyles = StyleSheet.create({
   overlay: {
-    flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 1000,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   dialogBox: {
     backgroundColor: '#fff',
@@ -2120,5 +2140,6 @@ app.listen(PORT, () => {
 });
 ```
 
-This setup works, but I've got a few issues on iOS. On Android, tapping a user from any of the user lists in the People modal will open a sharing option modal: on iPhone, nothing happens, with no error. After that, I can still move around the app, but the map doesnt respond.
+This setup works, but I need to fix something: in the main "People" bottom sheet modal, each bottom sheet user item shows that user's name, timestamp, and distance away. I want that distance away to be shown on the right side of the list item, centered vertically; but instead, they are currently being shown stick to the name.
+Additionaly, in this same main bottom sheet, when I start to scroll, everything moves: users, and title "People". But I want the "People" title to remain put and not be part of the scrollable area/items.
 I need you to fully develop and fix this.
