@@ -12,7 +12,8 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
-  Animated
+  Animated,
+  Dimensions
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { signOut } from 'firebase/auth';
@@ -164,7 +165,7 @@ const BottomSheetUserItem = ({ user, currentLocation, onPress }) => {
   return (
     <ListItem
       bottomDivider
-      containerStyle={{ backgroundColor: 'transparent' }}
+      containerStyle={{ backgroundColor: 'transparent', paddingLeft: 20, paddingRight: 20 }}
       onPress={onPress}
     >
       <Avatar
@@ -353,6 +354,11 @@ export default function HomeScreen() {
     }
   }, [selectedSocialUser]);
 
+  const { height: screenHeight } = Dimensions.get('window');
+  // Adjust this percentage based on your bottom sheet’s size.
+  const BOTTOM_SHEET_PERCENTAGE = 0.32;
+  const bottomInset = screenHeight * BOTTOM_SHEET_PERCENTAGE;
+
   /* --- Mapbox setup --- */
   useEffect(() => {
     Mapbox.setAccessToken('pk.eyJ1IjoidG90b2IxMjE3IiwiYSI6ImNsbXo4NHdocjA4dnEya215cjY0aWJ1cGkifQ.OMzA6Q8VnHLHZP-P8ACBRw');
@@ -382,6 +388,7 @@ export default function HomeScreen() {
       cameraRef.current?.setCamera({
         centerCoordinate: [currentLocation.longitude, currentLocation.latitude],
         zoomLevel: 16,
+        padding: { paddingTop: 0, paddingRight: 0, paddingBottom: bottomInset, paddingLeft: 0 },
         animationMode: 'none',
         animationDuration: 0,
       });
@@ -575,30 +582,31 @@ export default function HomeScreen() {
   /* --- Handlers for main bottom sheet user items --- */
   const bottomSheetRef = useRef(null);
   const userInfoModalRef = useRef(null);
-  const snapPoints = useMemo(() => ['10%', '32%', '80%'], []);
+  const snapPoints = useMemo(() => ['10%', '45%', '80%'], []);
   const openUserInfo = (user) => {
-    // Center map on user’s location and open the user info modal.
+    // Center map on user’s location with custom padding.
+    // This will offset the center upward so that the marker isn’t hidden by the bottom sheet.
+    const cameraSettings = {
+      centerCoordinate: [user.location.longitude, user.location.latitude],
+      zoomLevel: 16,
+      padding: { paddingTop: 0, paddingRight: 0, paddingBottom: bottomInset, paddingLeft: 0 },
+      animationMode: 'flyTo',
+      animationDuration: 1000,
+    };
+  
     if (tracking) {
       setTracking(false);
       setTimeout(() => {
-        cameraRef.current?.setCamera({
-          centerCoordinate: [user.location.longitude, user.location.latitude],
-          animationMode: 'flyTo',
-          animationDuration: 1000,
-          zoomLevel: 16,
-        });
+        cameraRef.current?.setCamera(cameraSettings);
       }, 150);
     } else {
-      cameraRef.current?.setCamera({
-        centerCoordinate: [user.location.longitude, user.location.latitude],
-        animationMode: 'flyTo',
-        animationDuration: 1000,
-        zoomLevel: 16,
-      });
+      cameraRef.current?.setCamera(cameraSettings);
     }
+  
     bottomSheetRef.current?.close();
     setSelectedUserInfo(user);
   };
+  
 
   const closeUserInfo = () => {
     userInfoModalRef.current?.dismiss();
@@ -620,6 +628,7 @@ export default function HomeScreen() {
         cameraRef.current?.setCamera({
           centerCoordinate: [currentLocation.longitude, currentLocation.latitude],
           zoomLevel: 16,
+          padding: { paddingTop: 0, paddingRight: 0, paddingBottom: bottomInset, paddingLeft: 0 },
           animationMode: 'flyTo',
           animationDuration: 1000,
         });
@@ -1159,13 +1168,13 @@ export default function HomeScreen() {
           <BottomSheetModal
             ref={userInfoModalRef}
             index={0}
-            snapPoints={['32%', '80%']}
+            snapPoints={['45%', '80%']}
             enableDynamicSizing={false}
             onDismiss={closeUserInfo}
             backgroundStyle={{ borderRadius: 20 }}
           >
             {selectedUserInfo && (
-              <BottomSheetView style={{ padding: 20 }}>
+              <BottomSheetView style={{ paddingLeft: 20, paddingRight: 20 }}>
                 <View style={styles.userInfoHeader}>
                   <Text style={styles.userInfoName}>
                     {(`${selectedUserInfo.firstName || ''} ${selectedUserInfo.lastName || ''}`).trim()}
@@ -1358,11 +1367,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   bottomSheetHeader: {
-    padding: 10,
     paddingLeft: 20,
-    backgroundColor: 'white',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
   },
   bottomSheetTitle: {
     fontSize: 24,
@@ -1382,7 +1387,6 @@ const styles = StyleSheet.create({
   },
   userNameText: {
     fontSize: 16,
-    // fontWeight: 'bold',
     color: '#000',
   },
   distanceText: {
