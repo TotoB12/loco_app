@@ -162,7 +162,11 @@ const markerStyles = StyleSheet.create({
 ------------------------- */
 const BottomSheetUserItem = ({ user, currentLocation, onPress }) => {
   return (
-    <ListItem bottomDivider containerStyle={{ backgroundColor: 'transparent' }} onPress={onPress}>
+    <ListItem
+      bottomDivider
+      containerStyle={{ backgroundColor: 'transparent' }}
+      onPress={onPress}
+    >
       <Avatar
         rounded
         source={
@@ -182,17 +186,17 @@ const BottomSheetUserItem = ({ user, currentLocation, onPress }) => {
             : {}
         }
       />
-      <ListItem.Content>
+      <View style={{ flex: 1 }}>
         <View style={styles.userItemHeader}>
-          <ListItem.Title>
+          <Text style={styles.userNameText}>
             {(`${user.firstName || ''} ${user.lastName || ''}`).trim()}
-          </ListItem.Title>
+          </Text>
           <LiveDistance currentLocation={currentLocation} userLocation={user.location} />
         </View>
-        <ListItem.Subtitle>
+        <Text style={styles.timestampText}>
           <LiveTimeAgo timestamp={user.locationTimestamp} />
-        </ListItem.Subtitle>
-      </ListItem.Content>
+        </Text>
+      </View>
     </ListItem>
   );
 };
@@ -581,6 +585,7 @@ export default function HomeScreen() {
           centerCoordinate: [user.location.longitude, user.location.latitude],
           animationMode: 'flyTo',
           animationDuration: 1000,
+          zoomLevel: 16,
         });
       }, 150);
     } else {
@@ -588,6 +593,7 @@ export default function HomeScreen() {
         centerCoordinate: [user.location.longitude, user.location.latitude],
         animationMode: 'flyTo',
         animationDuration: 1000,
+        zoomLevel: 16,
       });
     }
     bottomSheetRef.current?.close();
@@ -868,6 +874,7 @@ export default function HomeScreen() {
             compassViewPosition={0}
             compassViewMargins={{ x: 15, y: 64 }}
             compassFadeWhenNorth={false}
+            pitchEnabled={false}
           >
             <LocationPuck
               topImage="topImage"
@@ -1024,7 +1031,7 @@ export default function HomeScreen() {
                       />
                     </View>
                   </TouchableOpacity>
-                  </Animated.View>
+                </Animated.View>
               )}
 
               <View style={styles.modalHeader}>
@@ -1127,8 +1134,10 @@ export default function HomeScreen() {
             enablePanDownToClose={false}
             backgroundStyle={{ borderRadius: 20 }}
           >
-            <BottomSheetScrollView contentContainerStyle={styles.bottomSheetContent}>
+            <View style={styles.bottomSheetHeader}>
               <Text style={styles.bottomSheetTitle}>People</Text>
+            </View>
+            <BottomSheetScrollView contentContainerStyle={styles.bottomSheetContent}>
               {Object.values(receivingFromData).length > 0 ? (
                 Object.values(receivingFromData).map((user) => (
                   <BottomSheetUserItem
@@ -1348,25 +1357,40 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
   },
-  bottomSheetContent: {
+  bottomSheetHeader: {
+    padding: 10,
+    paddingLeft: 20,
     backgroundColor: 'white',
-    paddingBottom: 20,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
   },
   bottomSheetTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    padding: 10,
-    paddingLeft: 20,
-    textAlign: 'left',
+    color: '#000',
+  },
+  bottomSheetContent: {
+    backgroundColor: 'white',
+    paddingBottom: 20,
   },
   userItemHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    width: '100%',
+    marginBottom: 5,
+  },
+  userNameText: {
+    fontSize: 16,
+    // fontWeight: 'bold',
+    color: '#000',
   },
   distanceText: {
     fontSize: 14,
-    textAlign: 'right',
+    color: '#888',
+  },
+  timestampText: {
+    fontSize: 14,
     color: '#888',
   },
   userInfoHeader: {
