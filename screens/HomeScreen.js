@@ -308,6 +308,7 @@ export default function HomeScreen() {
   const cameraRef = useRef(null);
   const initialCameraCentered = useRef(false);
   const [tracking, setTracking] = useState(false);
+  const [heading, setHeading] = useState(0);
 
   /* --- Modal & UI state --- */
   const [showSettings, setShowSettings] = useState(false);
@@ -593,7 +594,7 @@ export default function HomeScreen() {
       animationMode: 'flyTo',
       animationDuration: 1000,
     };
-  
+
     if (tracking) {
       setTracking(false);
       setTimeout(() => {
@@ -602,11 +603,11 @@ export default function HomeScreen() {
     } else {
       cameraRef.current?.setCamera(cameraSettings);
     }
-  
+
     bottomSheetRef.current?.close();
     setSelectedUserInfo(user);
   };
-  
+
 
   const closeUserInfo = () => {
     userInfoModalRef.current?.dismiss();
@@ -636,6 +637,14 @@ export default function HomeScreen() {
     } else {
       setTracking(false);
     }
+  };
+
+  /* --- Toggle heading --- */
+  const resetHeading = () => {
+    cameraRef.current?.setCamera({
+      heading: 0,
+      animationDuration: 300,
+    });
   };
 
   /* --- Name validation and update --- */
@@ -879,11 +888,9 @@ export default function HomeScreen() {
             attributionEnabled={false}
             logoEnabled={false}
             scaleBarEnabled={false}
-            compassEnabled={true}
-            compassViewPosition={0}
-            compassViewMargins={{ x: 15, y: 64 }}
-            compassFadeWhenNorth={false}
+            compassEnabled={false}
             pitchEnabled={false}
+            onCameraChanged={(event) => setHeading(event.properties.heading)}
           >
             <LocationPuck
               topImage="topImage"
@@ -930,12 +937,23 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity
-            style={[styles.trackButton, { top: insets.top + 54 }, tracking && styles.trackButtonActive]}
-            onPress={toggleTracking}
-          >
-            <MaterialIcons name="my-location" size={24} color={tracking ? '#fff' : '#000'} />
-          </TouchableOpacity>
+          {/* Second row with location tracking and compass buttons */}
+          <View style={[styles.topRow, { top: insets.top + 55 }]}>
+            <TouchableOpacity style={styles.iconButton} onPress={resetHeading}>
+              <FontAwesome5
+                name="compass"
+                size={24}
+                color="black"
+                style={{ transform: [{ rotate: `${-heading - 45}deg` }] }}
+              />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.iconButton, tracking && styles.trackButtonActive]}
+              onPress={toggleTracking}
+            >
+              <MaterialIcons name="my-location" size={24} color={tracking ? '#fff' : '#000'} />
+            </TouchableOpacity>
+          </View>
 
           {/* ------------- Settings Modal ------------- */}
           <Modal
