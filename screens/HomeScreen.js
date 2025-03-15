@@ -261,37 +261,55 @@ const SocialUserItem = ({ user, sharingWithIds, receivingFromIds, onPress }) => 
 function SharingDialog({ targetUser, sharingStatus, onShare, onStopSharing, onStopReceiving, onClose }) {
   let message = '';
   let actions = [];
+  // Handle cases where the name might be missing
+  const userName = (`${targetUser.firstName || ''} ${targetUser.lastName || ''}`).trim() || 'this user';
+
+  // Define message and actions based on sharing status
   if (sharingStatus.amSharing && !sharingStatus.amReceiving) {
-    message = `You are sharing your location with ${targetUser.firstName}`;
-    actions.push({ title: 'Stop Sharing My Location', onPress: onStopSharing });
+    message = `You are sharing your location with ${userName}`;
+    actions.push({ title: 'Stop Sharing My Location', onPress: onStopSharing, color: 'red' });
   } else if (!sharingStatus.amSharing && sharingStatus.amReceiving) {
-    message = `${targetUser.firstName} is sharing their location`;
-    actions.push({ title: 'Share My Location', onPress: onShare });
-    actions.push({ title: `Remove ${targetUser.firstName}`, onPress: onStopReceiving });
+    message = `${userName} is sharing their location`;
+    actions.push({ title: 'Share My Location', onPress: onShare, color: COLORS.black });
+    actions.push({ title: `Remove ${userName}`, onPress: onStopReceiving, color: 'red' });
   } else if (sharingStatus.amSharing && sharingStatus.amReceiving) {
     message = 'You are both sharing';
-    actions.push({ title: 'Stop Sharing My Location', onPress: onStopSharing });
-    actions.push({ title: `Remove ${targetUser.firstName}`, onPress: onStopReceiving });
+    actions.push({ title: 'Stop Sharing My Location', onPress: onStopSharing, color: 'red' });
+    actions.push({ title: `Remove ${userName}`, onPress: onStopReceiving, color: 'red' });
   } else {
     message = 'Neither of you are sharing';
-    actions.push({ title: 'Share My Location', onPress: onShare });
+    actions.push({ title: 'Share My Location', onPress: onShare, color: COLORS.black });
   }
+
   return (
     <View style={SharingStyles.dialogContainer}>
       <Text style={SharingStyles.dialogMessage}>{message}</Text>
-      {actions.map((action, index) => (
-        <View key={index} style={SharingStyles.buttonContainer}>
-          <Button
-            title={action.title}
-            onPress={() => {
-              action.onPress();
-              onClose();
-            }}
-          />
-        </View>
-      ))}
-      <View style={SharingStyles.buttonContainer}>
-        <Button title="Cancel" onPress={onClose} />
+      <View style={SharingStyles.buttonsContainer}>
+        {actions.map((action, index) => (
+          <React.Fragment key={index}>
+            {index > 0 && <Divider style={SharingStyles.divider} />}
+            <TouchableOpacity
+              style={SharingStyles.button}
+              onPress={() => {
+                action.onPress();
+                onClose();
+              }}
+            >
+              <Text style={[SharingStyles.buttonText, { color: action.color }]}>
+                {action.title}
+              </Text>
+            </TouchableOpacity>
+          </React.Fragment>
+        ))}
+        <Divider style={SharingStyles.divider} />
+        <TouchableOpacity
+          style={SharingStyles.button}
+          onPress={onClose}
+        >
+          <Text style={[SharingStyles.buttonText, { color: '#888' }]}>
+            Cancel
+          </Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -1115,7 +1133,7 @@ export default function HomeScreen() {
                           />
                         ))
                       ) : (
-                        <Text style={{ margin: 10, textAlign: 'center' }}>
+                        <Text style={{ margin: 20, textAlign: 'center' }}>
                           You are not sharing your location yet.
                         </Text>
                       )}
@@ -1141,7 +1159,7 @@ export default function HomeScreen() {
                           />
                         ))
                       ) : (
-                        <Text style={{ margin: 10, textAlign: 'center' }}>
+                        <Text style={{ margin: 20, textAlign: 'center' }}>
                           Nobody has shared with you yet.
                         </Text>
                       )}
@@ -1475,7 +1493,6 @@ const dialogStyles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   dialogBox: {
     backgroundColor: '#fff',
@@ -1483,6 +1500,11 @@ const dialogStyles = StyleSheet.create({
     padding: 20,
     marginHorizontal: 20,
     width: '80%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
 });
 
@@ -1490,17 +1512,27 @@ const SharingStyles = StyleSheet.create({
   dialogContainer: {
     backgroundColor: '#fff',
     padding: 20,
-    marginHorizontal: 20,
     borderRadius: 8,
-    alignItems: 'center',
+    alignItems: 'stretch',
   },
   dialogMessage: {
     fontSize: 16,
+    color: '#555',
     marginBottom: 15,
-    textAlign: 'center',
   },
-  buttonContainer: {
-    marginVertical: 5,
+  buttonsContainer: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+  },
+  button: {
+    padding: 15,
+    alignItems: 'center',
+  },
+  buttonText: {
+    fontSize: 16,
+  },
+  divider: {
     width: '100%',
+    marginVertical: 5,
   },
 });
