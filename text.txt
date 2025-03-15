@@ -174,7 +174,7 @@ export default function App() {
               desiredStoppedUpdateInterval: 60,
               fastestStoppedUpdateInterval: 60,
               desiredMovingUpdateInterval: 60,
-              fastestMovingUpdateInterval: 30,
+              fastestMovingUpdateInterval: 60,
               desiredSyncInterval: 20,
               desiredAccuracy: "high",
               stopDuration: 140,
@@ -1833,8 +1833,7 @@ package.json
 ```json
 {
   "name": "loco",
-  "license": "0BSD",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "main": "index.js",
   "scripts": {
     "start": "expo start --dev-client",
@@ -1844,6 +1843,7 @@ package.json
   },
   "dependencies": {
     "@expo/vector-icons": "^14.0.2",
+    "@gorhom/bottom-sheet": "5",
     "@react-native-async-storage/async-storage": "1.23.1",
     "@react-navigation/native": "^7.0.14",
     "@react-navigation/stack": "^7.1.1",
@@ -1858,6 +1858,7 @@ package.json
     "expo-image-picker": "~16.0.5",
     "expo-intent-launcher": "~12.0.2",
     "expo-location": "~18.0.5",
+    "expo-splash-screen": "~0.29.21",
     "expo-status-bar": "~2.0.0",
     "expo-task-manager": "~12.0.4",
     "firebase": "^11.1.0",
@@ -1992,7 +1993,7 @@ const express = require('express');
 const crypto = require('crypto');
 const admin = require('firebase-admin');
 
-// Initialize Firebase Admin
+// Initialize Firebase Admin using your service account from an environment variable.
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
 admin.initializeApp({
@@ -2006,6 +2007,28 @@ const PORT = process.env.PORT || 3000;
 // Middleware to parse incoming JSON bodies
 app.use(express.json());
 
+// Serve static files (HTML, CSS, JS) from the "public" directory
+app.use(express.static('public'));
+
+app.get('/', (req, res) => {
+    res.redirect('/home');
+});
+
+// serve login.html
+app.get('/login', (req, res) => {
+    res.sendFile(__dirname + '/public/login.html');
+});
+
+// serve signup.html
+app.get('/signup', (req, res) => {
+    res.sendFile(__dirname + '/public/signup.html');
+});
+
+// serve home.html
+app.get('/home', (req, res) => {
+    res.sendFile(__dirname + '/public/home.html');
+});
+
 // Function to verify the Radar webhook signature
 function verifyRadarSignature(req) {
     const signingId = req.headers['x-radar-signing-id'];
@@ -2016,7 +2039,6 @@ function verifyRadarSignature(req) {
         return false;
     }
 
-    // Use the token from an environment variable if set
     const token = process.env.RADAR_WEBHOOK_TOKEN || 'null';
     const hmac = crypto.createHmac('sha1', token);
     hmac.update(signingId);
@@ -2031,12 +2053,11 @@ function verifyRadarSignature(req) {
 
 // POST endpoint for Radar webhooks
 app.post('/api', async (req, res) => {
-    // Verify the request is coming from Radar
     if (!verifyRadarSignature(req)) {
         return res.status(403).send('Forbidden: Invalid signature');
     }
 
-    // Radar may send a single event (key: "event") or multiple events (key: "events")
+    // Handle either a single event or multiple events
     let events = [];
     if (req.body.event) {
         events.push(req.body.event);
@@ -2047,36 +2068,29 @@ app.post('/api', async (req, res) => {
         return res.status(400).send('Bad Request: No event data');
     }
 
-    // console.log(events);
-
-    // Process each event received from Radar
+    // Process each event from Radar
     for (const event of events) {
         try {
-            // Extract the user ID. Radar’s payload nests the user info in "user"
             const userId = event.user && event.user.userId ? event.user.userId : null;
             if (!userId) {
                 console.error('No userId found in event:', event);
-                continue; // Skip this event if no userId is found
+                continue;
             }
 
-            // Ensure that the event contains valid location data
             if (event.location &&
                 event.location.coordinates &&
                 event.location.coordinates.length === 2) {
-
                 // Radar sends coordinates as [longitude, latitude]
                 const [longitude, latitude] = event.location.coordinates;
-                // Use the event's createdAt timestamp if available; otherwise use Firebase's server timestamp
                 const timestamp = event.createdAt
                     ? new Date(event.createdAt).getTime()
                     : admin.database.ServerValue.TIMESTAMP;
 
-                // Update the user's location in the Firebase Realtime Database
+                // Update the user's location in Firebase Realtime Database
                 await admin.database().ref(`users/${userId}`).update({
                     location: { latitude, longitude },
                     locationTimestamp: timestamp,
                 });
-
                 console.log(`Updated location for user ${userId}: (${latitude}, ${longitude})`);
             } else {
                 console.error('Event does not contain valid location data:', event);
@@ -2095,75 +2109,247 @@ app.get('/health', (req, res) => {
     res.send('Server is healthy');
 });
 
+// serve 404.html
+app.get('*', (req, res) => {
+    res.sendFile(__dirname + '/public/404.html');
+});
+
 // Start the server
 app.listen(PORT, () => {
-    console.log(`Radar Webhook server listening on port ${PORT}`);
+    console.log(`Server listening on port ${PORT}`);
 });
 ```
 
-This setup works, but I've got a few issues on iOS. On Android, tapping a user from any of the user lists in the People modal will open a sharing option modal: on iPhone, nothing happens, with no error. After that, I can still move around the app, but the map dowsnt respond.
-To fix this, I want to try and replace the Sharing Options Modal with a Bottom Sheet Modal. It will look and feel like the user info bottom sheet modal, but this one should open above the people modal, and show the usual sharing buttons for that user.
-I want you to fully develop and implement this. Here is some documentation to help:
+This setup works, but I've got a few issues on iOS. On Android, tapping a user from any of the user lists in the People modal will open a sharing option modal: on iPhone, nothing happens, with no error. After that, I can still move around the app, but the map doesnt respond. Maybe using dialogs instead of raw modal for the options would be best?
+I need you to fully develop and fix this. Here are some docs:
 
 ```
+Dialog
+Dialogs inform users about a task and can contain critical information, require decisions, or involve multiple tasks. You can wrap any component with a simple Dialog component to display quick information to the user. Also receives all Overlay props except fullscreen.
+
 Usage
-Here is a simple usage of the Bottom Sheet Modal, with non-scrollable content. For more scrollable usage please read Scrollables.
+Import
+import { Dialog } from '@rneui/themed';
 
-import React, { useCallback, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, Button } from 'react-native';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
+Theme Key 
+Dialog
+
+Web-platform specific note:
+
+You must pass a valid React Native Modal component implementation into ModalComponent prop because Modal component is not implemented yet in react-native-web
+
+...
+import Modal from 'modal-react-native-web';
+
+...
+
+<Dialog ModalComponent={Modal} ... />
+...
+
+```
+import React, { useState } from 'react';
 import {
-  BottomSheetModal,
-  BottomSheetView,
-  BottomSheetModalProvider,
-} from '@gorhom/bottom-sheet';
+Button,
+Dialog,
+CheckBox,
+ListItem,
+Avatar,
+} from '@rneui/themed';
+import { View, Text, StyleSheet } from 'react-native';
 
-const App = () => {
-  // ref
-  const bottomSheetModalRef = useRef<BottomSheetModal>(null);
+type DialogComponentProps = {};
 
-  // callbacks
-  const handlePresentModalPress = useCallback(() => {
-    bottomSheetModalRef.current?.present();
-  }, []);
-  const handleSheetChanges = useCallback((index: number) => {
-    console.log('handleSheetChanges', index);
-  }, []);
+const Dialogs: React.FunctionComponent<DialogComponentProps> = () => {
+const [visible1, setVisible1] = useState(false);
+const [visible2, setVisible2] = useState(false);
+const [visible3, setVisible3] = useState(false);
+const [visible4, setVisible4] = useState(false);
+const [visible5, setVisible5] = useState(false);
+const [visible6, setVisible6] = useState(false);
+const [checked, setChecked] = useState(1);
 
-  // renders
-  return (
-      <GestureHandlerRootView style={styles.container}>
-        <BottomSheetModalProvider>
-          <Button
-            onPress={handlePresentModalPress}
-            title="Present Modal"
-            color="black"
-          />
-          <BottomSheetModal
-            ref={bottomSheetModalRef}
-            onChange={handleSheetChanges}
-          >
-            <BottomSheetView style={styles.contentContainer}>
-              <Text>Awesome 🎉</Text>
-            </BottomSheetView>
-        </BottomSheetModal>
-        </BottomSheetModalProvider>
-    </GestureHandlerRootView>
-  );
+const toggleDialog1 = () => {
+  setVisible1(!visible1);
+};
+const toggleDialog2 = () => {
+  setVisible2(!visible2);
+};
+const toggleDialog3 = () => {
+  setVisible3(!visible3);
+};
+const toggleDialog4 = () => {
+  setVisible4(!visible4);
+};
+const toggleDialog5 = () => {
+  setVisible5(!visible5);
+};
+const toggleDialog6 = () => {
+  setVisible6(!visible6);
+};
+
+const userlist = [
+  {
+    name: 'Amy Farha',
+    avatar_url: 'https://uifaces.co/our-content/donated/XdLjsJX_.jpg',
+    subtitle: 'amy.farha@gmail.com',
+  },
+  {
+    name: 'Chris Jackson',
+    avatar_url: 'https://uifaces.co/our-content/donated/KtCFjlD4.jpg',
+    subtitle: 'cjackson@gmail.com',
+  },
+  {
+    name: 'Amanda Martin',
+    avatar_url:
+      'https://images.unsplash.com/photo-1498529605908-f357a9af7bf5?ixlib=rb-0.3.5&q=80&fm=jpg&crop=faces&fit=crop&h=200&w=200&s=047fade70e80ebb22ac8f09c04872c40',
+    subtitle: 'amandam@gmail.com',
+  },
+];
+
+return (
+  <View>
+    <View style={styles.buttonContainer}>
+      <Button
+        title="Open Simple Dialog"
+        onPress={toggleDialog1}
+        buttonStyle={styles.button}
+      />
+      <Button
+        title="Open Mutli Action Dialog"
+        onPress={toggleDialog2}
+        buttonStyle={styles.button}
+      />
+      <Button
+        title="Open Loading Dialog"
+        onPress={toggleDialog3}
+        buttonStyle={styles.button}
+      />
+      <Button
+        title="Open Buttonless Dialog"
+        onPress={toggleDialog4}
+        buttonStyle={styles.button}
+      />
+      <Button
+        title="Open Custom Dialog 1"
+        onPress={toggleDialog5}
+        buttonStyle={styles.button}
+      />
+      <Button
+        title="Open Custom Dialog 2"
+        onPress={toggleDialog6}
+        buttonStyle={styles.button}
+      />
+    </View>
+    <Dialog
+      isVisible={visible1}
+      onBackdropPress={toggleDialog1}
+    >
+      <Dialog.Title title="Dialog Title"/>
+      <Text>Dialog body text. Add relevant information here.</Text>
+    </Dialog>
+    <Dialog
+      isVisible={visible2}
+      onBackdropPress={toggleDialog2}
+    >
+      <Dialog.Title title="Dialog Title"/>
+      <Text>Dialog body text. Add relevant information here.</Text>
+      <Dialog.Actions>
+        <Dialog.Button title="ACTION 1" onPress={() => console.log('Primary Action Clicked!')}/>
+        <Dialog.Button title="ACTION 2" onPress={() => console.log('Secondary Action Clicked!')}/>
+      </Dialog.Actions>
+    </Dialog>
+    <Dialog isVisible={visible3} onBackdropPress={toggleDialog3}>
+      <Dialog.Loading />
+    </Dialog>
+    <Dialog
+      isVisible={visible4}
+      onBackdropPress={toggleDialog4}
+    >
+      <Dialog.Title title="Dialog Title"/>
+      <Text>Dialog body text. Add relevant information here.</Text>
+    </Dialog>
+    <Dialog
+      isVisible={visible5}
+      onBackdropPress={toggleDialog5}
+    >
+      <Dialog.Title title="Select Preference"/>
+      {['Option 1', 'Option 2', 'Option 3'].map((l, i) => (
+        <CheckBox
+          key={i}
+          title={l}
+          containerStyle={{ backgroundColor: 'white', borderWidth: 0 }}
+          checkedIcon="dot-circle-o"
+          uncheckedIcon="circle-o"
+          checked={checked === i + 1}
+          onPress={() => setChecked(i + 1)}
+        />
+      ))}
+
+      <Dialog.Actions>
+        <Dialog.Button
+          title="CONFIRM"
+          onPress={() => {
+            console.log(`Option ${checked} was selected!`);
+            toggleDialog5();
+          }}
+        />
+        <Dialog.Button title="CANCEL" onPress={toggleDialog5} />
+      </Dialog.Actions>
+    </Dialog>
+    <Dialog
+      isVisible={visible6}
+      onBackdropPress={toggleDialog6}
+    >
+      <Dialog.Title title="Choose Account"/>
+      {userlist.map((l, i) => (
+        <ListItem
+          key={i}
+          containerStyle={{
+            marginHorizontal: -10,
+            borderRadius: 8,
+          }}
+          onPress={toggleDialog6}
+        >
+          <Avatar rounded source={{ uri: l.avatar_url }} />
+          <ListItem.Content>
+            <ListItem.Title style={{ fontWeight: '700' }}>
+              {l.name}
+            </ListItem.Title>
+            <ListItem.Subtitle>{l.subtitle}</ListItem.Subtitle>
+          </ListItem.Content>
+        </ListItem>
+      ))}
+    </Dialog>
+  </View>
+);
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 24,
-    justifyContent: 'center',
-    backgroundColor: 'grey',
-  },
-  contentContainer: {
-    flex: 1,
-    alignItems: 'center',
-  },
+button: {
+  borderRadius: 6,
+  width: 220,
+  margin: 20,
+},
+buttonContainer: {
+  margin: 20,
+  justifyContent: 'center',
+  alignItems: 'center',
+},
 });
 
-export default App;
+export default Dialogs;
+```
+
+
+Props
+note
+Includes all Overlay props.
+
+Name	Type	Default	Description
+children	ReactNode		Add Enclosed components.
+onLongPress	GestureResponderEventHandler		Called when a long-tap gesture is detected.
+onPressIn	GestureResponderEventHandler		Called when a touch is engaged before onPress.
+onPressOut	GestureResponderEventHandler		Called when a touch is released before onPress.
+overlayStyle	View Style		Add additional styling to the internal Overlay component.
+pressableProps	PressableProps except click handlers	None	
 ```
