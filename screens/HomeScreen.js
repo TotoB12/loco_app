@@ -23,11 +23,12 @@ import Radar from 'react-native-radar';
 import Mapbox, { MapView, LocationPuck, MarkerView, Camera, UserTrackingMode } from '@rnmapbox/maps';
 import { MaterialIcons } from '@expo/vector-icons';
 import { FontAwesome5 } from '@expo/vector-icons';
-import { SearchBar, ListItem, Divider, Avatar } from '@rneui/themed';
+import { SearchBar, ListItem, Divider, Avatar, Card, Icon } from '@rneui/themed';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import BottomSheet, { BottomSheetScrollView, BottomSheetModal, BottomSheetModalProvider, BottomSheetView } from '@gorhom/bottom-sheet';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import {showLocation} from 'react-native-map-link';
 
 import {
   shareLocation,
@@ -164,43 +165,43 @@ const markerStyles = StyleSheet.create({
 const BottomSheetUserItem = ({ user, currentLocation, onPress }) => {
   return (
     <View>
-    <ListItem
-      // bottomDivider
-      containerStyle={{ backgroundColor: 'transparent', paddingLeft: 20, paddingRight: 20 }}
-      onPress={onPress}
-    >
-      <Avatar
-        rounded
-        source={
-          user.avatar && user.avatar.link
-            ? { uri: user.avatar.link }
-            : { uri: "data:image/png" }
-        }
-        icon={
-          !user.avatar || !user.avatar.link
-            ? { name: 'person-outline', type: 'material', size: 24 }
-            : undefined
-        }
-        size={40}
-        containerStyle={
-          !user.avatar || !user.avatar.link
-            ? { backgroundColor: '#c2c2c2' }
-            : {}
-        }
-      />
-      <View style={{ flex: 1 }}>
-        <View style={styles.userItemHeader}>
-          <Text style={styles.userNameText}>
-            {(`${user.firstName || ''} ${user.lastName || ''}`).trim()}
+      <ListItem
+        // bottomDivider
+        containerStyle={{ backgroundColor: 'transparent', paddingLeft: 20, paddingRight: 20 }}
+        onPress={onPress}
+      >
+        <Avatar
+          rounded
+          source={
+            user.avatar && user.avatar.link
+              ? { uri: user.avatar.link }
+              : { uri: "data:image/png" }
+          }
+          icon={
+            !user.avatar || !user.avatar.link
+              ? { name: 'person-outline', type: 'material', size: 24 }
+              : undefined
+          }
+          size={40}
+          containerStyle={
+            !user.avatar || !user.avatar.link
+              ? { backgroundColor: '#c2c2c2' }
+              : {}
+          }
+        />
+        <View style={{ flex: 1 }}>
+          <View style={styles.userItemHeader}>
+            <Text style={styles.userNameText}>
+              {(`${user.firstName || ''} ${user.lastName || ''}`).trim()}
+            </Text>
+            <LiveDistance currentLocation={currentLocation} userLocation={user.location} />
+          </View>
+          <Text style={styles.timestampText}>
+            <LiveTimeAgo timestamp={user.locationTimestamp} />
           </Text>
-          <LiveDistance currentLocation={currentLocation} userLocation={user.location} />
         </View>
-        <Text style={styles.timestampText}>
-          <LiveTimeAgo timestamp={user.locationTimestamp} />
-        </Text>
-      </View>
-    </ListItem>
-    <Divider style={{ width: '80%', alignSelf: 'center' }} />
+      </ListItem>
+      <Divider style={{ width: '80%', alignSelf: 'center' }} />
     </View>
   );
 };
@@ -913,6 +914,18 @@ export default function HomeScreen() {
     }
     : { amSharing: false, amReceiving: false };
 
+  /* --- Handlers for sharing options dialog in People modal --- */
+  const handleDirections = () => {
+    if (!selectedUserInfo || !selectedUserInfo.location) return;
+    const { latitude, longitude } = selectedUserInfo.location;
+    showLocation({
+      latitude: latitude,
+      longitude: longitude,
+      title: `${selectedUserInfo.firstName || 'User'} ${selectedUserInfo.lastName || ''}`,
+      dialogTitle: 'This is the dialog Title',
+    });
+  };
+
   /* -------------------------
      Render
   ------------------------- */
@@ -1234,7 +1247,7 @@ export default function HomeScreen() {
             backgroundStyle={{ borderRadius: 20 }}
           >
             {selectedUserInfo && (
-              <BottomSheetView style={{ paddingLeft: 20, paddingRight: 20 }}>
+              <BottomSheetScrollView style={{ paddingLeft: 20, paddingRight: 20 }}>
                 <View style={styles.userInfoHeader}>
                   <Text style={styles.userInfoName}>
                     {(`${selectedUserInfo.firstName || ''} ${selectedUserInfo.lastName || ''}`).trim()}
@@ -1249,6 +1262,34 @@ export default function HomeScreen() {
                 <Text style={styles.userInfoTimestamp}>
                   <LiveTimeAgo timestamp={selectedUserInfo.locationTimestamp} />
                 </Text>
+
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginVertical: 10 }}>
+                  <TouchableOpacity
+                    style={{ flex: 1, marginRight: 5 }}
+                    onPress={() => Alert.alert('Notifications', 'This feature is coming soon!')}
+                  >
+                    <Card containerStyle={styles.cardOptionContainer}>
+                      <View style={{ alignItems: 'left' }}>
+                        <Icon name="notifications" size={26} color={COLORS.green} />
+                        <Text style={{ marginTop: 5, fontSize: 18, fontWeight: "bold" }}>Notifications</Text>
+                      </View>
+                    </Card>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={{ flex: 1, marginLeft: 5 }}
+                    onPress={handleDirections}
+                  >
+                    <Card containerStyle={styles.cardOptionContainer}>
+                      <View style={{ alignItems: 'left' }}>
+                        <Icon name="directions" size={26} color={COLORS.navy} />
+                        <Text style={{ marginTop: 5, fontSize: 18, fontWeight: "bold" }}>Directions</Text>
+                        <Text style={{ marginTop: 5, fontSize: 12, color: '#888' }}>placeholder</Text>
+                      </View>
+                    </Card>
+                  </TouchableOpacity>
+                </View>
+
                 <View style={styles.userInfoButtonsContainer}>
                   <TouchableOpacity style={styles.userInfoButton} onPress={handleToggleShare}>
                     <Text style={[styles.userInfoButtonText, { color: userSharingStatus.amSharing ? "red" : COLORS.black }]}>
@@ -1264,7 +1305,7 @@ export default function HomeScreen() {
                     </TouchableOpacity>
                   )}
                 </View>
-              </BottomSheetView>
+              </BottomSheetScrollView>
             )}
           </BottomSheetModal>
         </View>
@@ -1483,9 +1524,15 @@ const styles = StyleSheet.create({
     color: '#555',
     marginBottom: 15,
   },
+  cardOptionContainer: {
+    width: '100%',
+    margin: 0,
+    backgroundColor: COLORS.white,
+    borderRadius: 10,
+    height: 'auto',
+  },
   userInfoButtonsContainer: {
-    flexDirection: 'column',
-    justifyContent: 'space-around',
+    // width: '100%',
     padding: 5,
     backgroundColor: COLORS.white,
     borderRadius: 10,

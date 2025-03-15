@@ -33,6 +33,7 @@
     "react-native": "0.76.5",
     "react-native-gesture-handler": "~2.20.2",
     "react-native-keyboard-aware-scroll-view": "^0.9.5",
+    "react-native-map-link": "^3.8.0",
     "react-native-maps": "1.18.0",
     "react-native-radar": "^3.19.1",
     "react-native-reanimated": "~3.16.1",

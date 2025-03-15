@@ -58,7 +58,8 @@ export default ({ config }) => {
           "image": "./assets/splash.png",
           "imageWidth": 200
         }
-      ]
+      ],
+      ["react-native-map-link"]
     ],
     "ios": {
       "buildNumber": "0.1.5",
