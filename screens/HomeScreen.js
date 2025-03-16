@@ -36,6 +36,7 @@ import {
 } from '../sharingUtils';
 
 import { COLORS } from '../colors';
+import AnimatedUserMarker from './AnimatedUserMarker';
 
 /* -------------------------
    Utility Functions
@@ -107,55 +108,6 @@ const LiveDistance = ({ currentLocation, userLocation, textStyle = styles.distan
   }, [currentLocation, userLocation]);
   return <Text style={textStyle}>{distanceText}</Text>;
 };
-
-/* -------------------------
-   Marker Component (Map)
-------------------------- */
-const UserMarker = ({ user, onPress }) => {
-  return (
-    <TouchableOpacity activeOpacity={0.8} onPress={onPress}>
-      <View style={markerStyles.container}>
-        <Avatar
-          rounded
-          source={
-            user.avatar && user.avatar.link
-              ? { uri: user.avatar.link }
-              : { uri: "data:image/png" }
-          }
-          icon={
-            !user.avatar || !user.avatar.link
-              ? { name: 'person-outline', type: 'material', size: 24 }
-              : undefined
-          }
-          size={30}
-          containerStyle={
-            !user.avatar || !user.avatar.link
-              ? { backgroundColor: '#c2c2c2' }
-              : {}
-          }
-        />
-        <Text style={markerStyles.nameText}>{user.firstName}</Text>
-      </View>
-    </TouchableOpacity>
-  );
-};
-
-const markerStyles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'white',
-    padding: 5,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'gray',
-  },
-  nameText: {
-    color: 'black',
-    marginLeft: 5,
-    fontSize: 16,
-  },
-});
 
 /* -------------------------
    Bottom Sheet User Item 
@@ -947,15 +899,11 @@ export default function HomeScreen() {
               }}
             />
             {markers.map((user) => (
-              <MarkerView
+              <AnimatedUserMarker
                 key={user.uid}
-                id={user.uid}
-                coordinate={[user.location.longitude, user.location.latitude]}
-                allowOverlapWithPuck={true}
-                allowOverlap={true}
-              >
-                <UserMarker user={user} onPress={() => openUserInfo(user)} />
-              </MarkerView>
+                user={user}
+                onPress={() => openUserInfo(user)}
+              />
             ))}
           </MapView>
 
