@@ -674,8 +674,8 @@ export default function HomeScreen() {
   useEffect(() => {
     if (!showSocial) {
       setSearch('');
-      setExpanded1(false);
-      setExpanded2(true);
+      setExpanded1(true);
+      setExpanded2(false);
     }
   }, [showSocial]);
 
@@ -1440,33 +1440,7 @@ export default function HomeScreen() {
                     <ListItem.Accordion
                       content={
                         <ListItem.Content>
-                          <ListItem.Title>Sharing With</ListItem.Title>
-                        </ListItem.Content>
-                      }
-                      isExpanded={expanded1}
-                      onPress={() => setExpanded1(!expanded1)}
-                    >
-                      {Object.values(sharingWithData).length > 0 ? (
-                        Object.values(sharingWithData).map((user) => (
-                          <SocialUserItem
-                            key={user.uid}
-                            user={user}
-                            sharingWithIds={sharingWithIds}
-                            receivingFromIds={receivingFromIds}
-                            onPress={handleSocialUserPress}
-                          />
-                        ))
-                      ) : (
-                        <Text style={{ margin: 20, textAlign: 'center' }}>
-                          You are not sharing your location yet.
-                        </Text>
-                      )}
-                    </ListItem.Accordion>
-                    <Divider style={{ width: '100%' }} insetType="middle" width={1} orientation="horizontal" />
-                    <ListItem.Accordion
-                      content={
-                        <ListItem.Content>
-                          <ListItem.Title>Receiving Locations</ListItem.Title>
+                          <ListItem.Title>Receiving Locations ({receivingFromIds.length})</ListItem.Title>
                         </ListItem.Content>
                       }
                       isExpanded={expanded2}
@@ -1485,6 +1459,32 @@ export default function HomeScreen() {
                       ) : (
                         <Text style={{ margin: 20, textAlign: 'center' }}>
                           Nobody has shared with you yet.
+                        </Text>
+                      )}
+                    </ListItem.Accordion>
+                    <Divider style={{ width: '100%' }} insetType="middle" width={1} orientation="horizontal" />
+                    <ListItem.Accordion
+                      content={
+                        <ListItem.Content>
+                          <ListItem.Title>Sharing With ({sharingWithIds.length})</ListItem.Title>
+                        </ListItem.Content>
+                      }
+                      isExpanded={expanded1}
+                      onPress={() => setExpanded1(!expanded1)}
+                    >
+                      {Object.values(sharingWithData).length > 0 ? (
+                        Object.values(sharingWithData).map((user) => (
+                          <SocialUserItem
+                            key={user.uid}
+                            user={user}
+                            sharingWithIds={sharingWithIds}
+                            receivingFromIds={receivingFromIds}
+                            onPress={handleSocialUserPress}
+                          />
+                        ))
+                      ) : (
+                        <Text style={{ margin: 20, textAlign: 'center' }}>
+                          You are not sharing your location yet.
                         </Text>
                       )}
                     </ListItem.Accordion>
@@ -1656,7 +1656,7 @@ const styles = StyleSheet.create({
     zIndex: 999,
   },
   trackButtonActive: {
-    backgroundColor: '#00ADB5',
+    backgroundColor: COLORS.blue,
   },
   currentLocationContainer: {
     alignItems: 'center',
@@ -2318,5 +2318,11 @@ app.listen(PORT, () => {
 });
 ```
 
-This setup works, but I need to fix a few things. In the "People" modal, there are two list accordions: "Sharing With" and "Receiving Locations". I want the names of these accordions to show exactly how many users are in each of those lists: "Sharing With ({numb})" and "Receiving Locations ({numb})".
+This setup works, but I need to fix a few things. In the user info bottom sheet modal, a lot of element do not work properly:
+- the timestamp does change, but it's weird, and goes only every 2 seconds for some reason
+- the address only updates when the user info bottom sheet modal is opened the first time: it needs to update everytime that user gets a new location
+- that user's name, when changed, updates immedietly on their map marker, but not on the user info bottom sheet modal: this also needs to update in realtime
+- the "distance" text inside the "Distance" card also doesnt update, same reasoning
+All of these elements updates perfectly on the main bottom sheet, so I want that to be applied here. Additionaly, I do not want to have a variety of event listeners all listening to the same user (this will increase my Firebase bill), so they should all share the same one(s).
+Also, if I have a user open in a user info bottom sheet modal, and they suddenly stop sharing their location to me: that modal should close itself on my device.
 I want you to fully develop and implement this.

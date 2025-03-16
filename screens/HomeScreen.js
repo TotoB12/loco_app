@@ -391,8 +391,8 @@ export default function HomeScreen() {
   useEffect(() => {
     if (!showSocial) {
       setSearch('');
-      setExpanded1(false);
-      setExpanded2(true);
+      setExpanded1(true);
+      setExpanded2(false);
     }
   }, [showSocial]);
 
@@ -1157,33 +1157,7 @@ export default function HomeScreen() {
                     <ListItem.Accordion
                       content={
                         <ListItem.Content>
-                          <ListItem.Title>Sharing With</ListItem.Title>
-                        </ListItem.Content>
-                      }
-                      isExpanded={expanded1}
-                      onPress={() => setExpanded1(!expanded1)}
-                    >
-                      {Object.values(sharingWithData).length > 0 ? (
-                        Object.values(sharingWithData).map((user) => (
-                          <SocialUserItem
-                            key={user.uid}
-                            user={user}
-                            sharingWithIds={sharingWithIds}
-                            receivingFromIds={receivingFromIds}
-                            onPress={handleSocialUserPress}
-                          />
-                        ))
-                      ) : (
-                        <Text style={{ margin: 20, textAlign: 'center' }}>
-                          You are not sharing your location yet.
-                        </Text>
-                      )}
-                    </ListItem.Accordion>
-                    <Divider style={{ width: '100%' }} insetType="middle" width={1} orientation="horizontal" />
-                    <ListItem.Accordion
-                      content={
-                        <ListItem.Content>
-                          <ListItem.Title>Receiving Locations</ListItem.Title>
+                          <ListItem.Title>Receiving Locations ({receivingFromIds.length})</ListItem.Title>
                         </ListItem.Content>
                       }
                       isExpanded={expanded2}
@@ -1202,6 +1176,32 @@ export default function HomeScreen() {
                       ) : (
                         <Text style={{ margin: 20, textAlign: 'center' }}>
                           Nobody has shared with you yet.
+                        </Text>
+                      )}
+                    </ListItem.Accordion>
+                    <Divider style={{ width: '100%' }} insetType="middle" width={1} orientation="horizontal" />
+                    <ListItem.Accordion
+                      content={
+                        <ListItem.Content>
+                          <ListItem.Title>Sharing With ({sharingWithIds.length})</ListItem.Title>
+                        </ListItem.Content>
+                      }
+                      isExpanded={expanded1}
+                      onPress={() => setExpanded1(!expanded1)}
+                    >
+                      {Object.values(sharingWithData).length > 0 ? (
+                        Object.values(sharingWithData).map((user) => (
+                          <SocialUserItem
+                            key={user.uid}
+                            user={user}
+                            sharingWithIds={sharingWithIds}
+                            receivingFromIds={receivingFromIds}
+                            onPress={handleSocialUserPress}
+                          />
+                        ))
+                      ) : (
+                        <Text style={{ margin: 20, textAlign: 'center' }}>
+                          You are not sharing your location yet.
                         </Text>
                       )}
                     </ListItem.Accordion>
@@ -1373,7 +1373,7 @@ const styles = StyleSheet.create({
     zIndex: 999,
   },
   trackButtonActive: {
-    backgroundColor: '#00ADB5',
+    backgroundColor: COLORS.blue,
   },
   currentLocationContainer: {
     alignItems: 'center',
