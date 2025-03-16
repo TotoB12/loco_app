@@ -1,4 +1,4 @@
-// screens/HomeScreen.js
+// HomeScreen.js
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
@@ -6,7 +6,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   Modal,
-  Button,
   TextInput,
   SafeAreaView,
   ScrollView,
@@ -18,7 +17,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { signOut } from 'firebase/auth';
 import { auth, db } from '../firebaseConfig';
-import { ref, onValue, off, update, get } from 'firebase/database';
+import { ref, onValue, update, get } from 'firebase/database';
 import Radar from 'react-native-radar';
 import Mapbox, { MapView, LocationPuck, MarkerView, Camera, UserTrackingMode } from '@rnmapbox/maps';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -26,7 +25,7 @@ import { FontAwesome5 } from '@expo/vector-icons';
 import { SearchBar, ListItem, Divider, Avatar, Card, Icon } from '@rneui/themed';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
-import BottomSheet, { BottomSheetScrollView, BottomSheetModal, BottomSheetModalProvider, BottomSheetView } from '@gorhom/bottom-sheet';
+import BottomSheet, { BottomSheetScrollView, BottomSheetModal, BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { showLocation } from 'react-native-map-link';
 
@@ -73,14 +72,14 @@ function getDistanceFromLatLonInMiles(lat1, lon1, lat2, lon2) {
 }
 
 /* -------------------------
-   Small live components
+   Live Components
 ------------------------- */
 const LiveTimeAgo = ({ timestamp }) => {
   const [timeAgo, setTimeAgo] = useState(getTimeAgo(timestamp));
   useEffect(() => {
     const interval = setInterval(() => {
       setTimeAgo(getTimeAgo(timestamp));
-    }, 2000);
+    }, 1000); // Update every second for smoother changes
     return () => clearInterval(interval);
   }, [timestamp]);
   return <Text>{timeAgo}</Text>;
@@ -103,14 +102,14 @@ const LiveDistance = ({ currentLocation, userLocation, textStyle = styles.distan
       }
     };
     calculateDistance();
-    const interval = setInterval(calculateDistance, 2000);
+    const interval = setInterval(calculateDistance, 1000); // Update every second
     return () => clearInterval(interval);
   }, [currentLocation, userLocation]);
   return <Text style={textStyle}>{distanceText}</Text>;
 };
 
 /* -------------------------
-   Marker component (map)
+   Marker Component (Map)
 ------------------------- */
 const UserMarker = ({ user, onPress }) => {
   return (
@@ -166,7 +165,6 @@ const BottomSheetUserItem = ({ user, currentLocation, onPress }) => {
   return (
     <View>
       <ListItem
-        // bottomDivider
         containerStyle={{ backgroundColor: 'transparent', paddingLeft: 20, paddingRight: 20 }}
         onPress={onPress}
       >
@@ -270,10 +268,7 @@ const SocialUserItem = ({ user, sharingWithIds, receivingFromIds, onPress }) => 
 function SharingDialog({ targetUser, sharingStatus, onShare, onStopSharing, onStopReceiving, onClose }) {
   let message = '';
   let actions = [];
-  // Handle cases where the name might be missing
   const userName = (`${targetUser.firstName || ''} ${targetUser.lastName || ''}`).trim() || 'this user';
-
-  // Define message and actions based on sharing status
   if (sharingStatus.amSharing && !sharingStatus.amReceiving) {
     message = `You are sharing your location with ${userName}`;
     actions.push({ title: 'Stop Sharing My Location', onPress: onStopSharing, color: 'red' });
@@ -331,14 +326,14 @@ function SharingDialog({ targetUser, sharingStatus, onShare, onStopSharing, onSt
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
 
-  /* --- Map & location state --- */
+  // Map & location state
   const [currentLocation, setCurrentLocation] = useState(null);
   const cameraRef = useRef(null);
   const initialCameraCentered = useRef(false);
   const [tracking, setTracking] = useState(false);
   const [heading, setHeading] = useState(0);
 
-  /* --- Modal & UI state --- */
+  // Modal & UI state
   const [showSettings, setShowSettings] = useState(false);
   const [settingsFirstName, setSettingsFirstName] = useState('');
   const [settingsLastName, setSettingsLastName] = useState('');
@@ -354,37 +349,36 @@ export default function HomeScreen() {
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState([]);
 
-  /* --- Real‑time sharing list states --- */
+  // Real‑time sharing list states
   const [sharingWithIds, setSharingWithIds] = useState([]);
   const [receivingFromIds, setReceivingFromIds] = useState([]);
   const [sharingWithData, setSharingWithData] = useState({}); // keyed by uid
   const [receivingFromData, setReceivingFromData] = useState({}); // keyed by uid
 
-  /* --- Selected user states --- */
-  // For main bottom sheet (user info modal on map)
-  const [selectedUserInfo, setSelectedUserInfo] = useState(null);
-  // For People modal (sharing options)
-  const [selectedSocialUser, setSelectedSocialUser] = useState(null);
-  const [selectedUserLocationName, setSelectedUserLocationName] = useState("");
-  // These sharing status objects are computed in real time
-  const [userSharingStatus, setUserSharingStatus] = useState({ amSharing: false, amReceiving: false });
+  // Instead of storing the full selected user, store only the selectedUserId.
+  // We then compute the selected user from our shared realtime data.
+  const [selectedUserId, setSelectedUserId] = useState(null);
+  const selectedUser = useMemo(() => {
+    if (!selectedUserId) return null;
+    return { ... (receivingFromData[selectedUserId] || {}), ... (sharingWithData[selectedUserId] || {}) };
+  }, [selectedUserId, receivingFromData, sharingWithData]);
 
   // Animated fade for the People modal sharing options dialog
-  const [fadeAnim] = useState(new Animated.Value(0)); // Starts at 0 (fully transparent)
+  const [fadeAnim] = useState(new Animated.Value(0));
+  const [selectedSocialUser, setSelectedSocialUser] = useState(null);
   useEffect(() => {
     if (selectedSocialUser) {
       Animated.timing(fadeAnim, {
-        toValue: 1, // Fade to fully opaque
-        duration: 100, // Animation duration in milliseconds
-        useNativeDriver: true, // Better performance
+        toValue: 1,
+        duration: 100,
+        useNativeDriver: true,
       }).start();
     } else {
-      fadeAnim.setValue(0); // Reset to transparent when dialog closes
+      fadeAnim.setValue(0);
     }
   }, [selectedSocialUser]);
 
   const { height: screenHeight } = Dimensions.get('window');
-  // Adjust this percentage based on your bottom sheet’s size.
   const BOTTOM_SHEET_PERCENTAGE = 0.32;
   const bottomInset = screenHeight * BOTTOM_SHEET_PERCENTAGE;
 
@@ -396,14 +390,12 @@ export default function HomeScreen() {
     }
   }, [showSocial]);
 
-
-  /* --- Mapbox setup --- */
   useEffect(() => {
     Mapbox.setAccessToken('pk.eyJ1IjoidG90b2IxMjE3IiwiYSI6ImNsbXo4NHdocjA4dnEya215cjY0aWJ1cGkifQ.OMzA6Q8VnHLHZP-P8ACBRw');
     Mapbox.setTelemetryEnabled(false);
   }, []);
 
-  /* --- Radar foreground tracking --- */
+  // Radar foreground tracking
   useEffect(() => {
     const trackLocation = () => {
       Radar.trackOnce({ desiredAccuracy: 'high' })
@@ -434,21 +426,18 @@ export default function HomeScreen() {
     }
   }, [currentLocation]);
 
-  /* --- Real‑time sharing lists subscriptions --- */
-  // "sharingWith" list (users you are sharing your location with)
+  // Real‑time sharing lists subscriptions
   useEffect(() => {
     const currentUser = auth.currentUser;
     if (!currentUser) return;
     const sharingWithRef = ref(db, `users/${currentUser.uid}/sharingWith`);
     const unsubscribe = onValue(sharingWithRef, (snapshot) => {
       const data = snapshot.val() || {};
-      // Always force a new array reference so the dependent effect fires
       setSharingWithIds(Object.keys(data));
     });
     return () => unsubscribe();
   }, []);
 
-  // "receivingFrom" list (users sharing with you)
   useEffect(() => {
     const currentUser = auth.currentUser;
     if (!currentUser) return;
@@ -460,17 +449,13 @@ export default function HomeScreen() {
     return () => unsubscribe();
   }, []);
 
-
   // Subscribe to each user in "sharingWith"
   const sharingWithListenersRef = useRef({});
   useEffect(() => {
-    // Unsubscribe from any uid no longer in sharingWithIds.
     Object.keys(sharingWithListenersRef.current).forEach((uid) => {
       if (!sharingWithIds.includes(uid)) {
-        // Unsubscribe from this user’s listener
         sharingWithListenersRef.current[uid]();
         delete sharingWithListenersRef.current[uid];
-        // Remove the user's data from state
         setSharingWithData((prev) => {
           const newData = { ...prev };
           delete newData[uid];
@@ -478,7 +463,6 @@ export default function HomeScreen() {
         });
       }
     });
-    // For each uid in sharingWithIds, attach a listener if not already attached.
     sharingWithIds.forEach((uid) => {
       if (!sharingWithListenersRef.current[uid]) {
         const userRef = ref(db, `users/${uid}`);
@@ -489,10 +473,8 @@ export default function HomeScreen() {
         sharingWithListenersRef.current[uid] = unsubscribe;
       }
     });
-    // No cleanup here so we don't remove listeners unnecessarily.
   }, [sharingWithIds]);
 
-  // Cleanup all sharingWith listeners when the component unmounts
   useEffect(() => {
     return () => {
       Object.values(sharingWithListenersRef.current).forEach((unsubscribe) => unsubscribe());
@@ -533,12 +515,12 @@ export default function HomeScreen() {
     };
   }, []);
 
-  /* --- Compute markers from receivingFrom users --- */
+  // Compute markers from receivingFrom users
   const markers = useMemo(() => {
     return Object.values(receivingFromData).filter((user) => user.location);
   }, [receivingFromData]);
 
-  /* --- Search Users (excluding self) --- */
+  // Search Users (excluding self)
   useEffect(() => {
     if (search.trim().length > 0) {
       const currentUser = auth.currentUser;
@@ -572,7 +554,7 @@ export default function HomeScreen() {
     }
   }, [search]);
 
-  /* --- Settings modal: fetch current profile data --- */
+  // Settings modal: fetch current profile data
   useEffect(() => {
     if (showSettings) {
       setFirstNameError(false);
@@ -601,29 +583,62 @@ export default function HomeScreen() {
     }
   }, [showSettings]);
 
-  /* --- Update sharing status for the main user info modal --- */
+  // If a user is open in the modal and they stop sharing, close the modal
   useEffect(() => {
-    if (selectedUserInfo) {
-      setUserSharingStatus({
-        amSharing: sharingWithIds.includes(selectedUserInfo.uid),
-        amReceiving: receivingFromIds.includes(selectedUserInfo.uid)
-      });
+    if (selectedUserId && !receivingFromIds.includes(selectedUserId) && !sharingWithIds.includes(selectedUserId)) {
+      closeUserInfo();
     }
-  }, [selectedUserInfo, sharingWithIds, receivingFromIds]);
+  }, [selectedUserId, receivingFromIds, sharingWithIds]);
 
-  /* --- Handlers for People modal (social user items) --- */
+  // Compute sharing status for the modal using selectedUserId
+  const userSharingStatus = useMemo(() => {
+    if (!selectedUserId) return { amSharing: false, amReceiving: false };
+    return {
+      amSharing: sharingWithIds.includes(selectedUserId),
+      amReceiving: receivingFromIds.includes(selectedUserId)
+    };
+  }, [selectedUserId, sharingWithIds, receivingFromIds]);
+
+  // Reverse geocode for user info modal: update whenever the selected user's location changes
+  const [selectedUserLocationName, setSelectedUserLocationName] = useState("");
+  const fetchReverseGeocode = async (lat, lon) => {
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`,
+        {
+          headers: {
+            'User-Agent': 'loco_app/1.0 (loco@totob12.com)'
+          }
+        }
+      );
+      const data = await response.json();
+      if (data && data.display_name) {
+        setSelectedUserLocationName(data.display_name);
+      } else {
+        setSelectedUserLocationName("Location not found");
+      }
+    } catch (error) {
+      console.error("Error fetching reverse geocode:", error);
+      setSelectedUserLocationName("Error fetching location");
+    }
+  };
+
+  useEffect(() => {
+    if (selectedUser && selectedUser.location) {
+      fetchReverseGeocode(selectedUser.location.latitude, selectedUser.location.longitude);
+    }
+  }, [selectedUser?.location?.latitude, selectedUser?.location?.longitude, selectedUser?.locationTimestamp]);
+
+  // Handlers for People modal (social user items)
   const handleSocialUserPress = (user) => {
-    // When a People modal user item is tapped, only open the sharing options modal.
     setSelectedSocialUser(user);
   };
 
-  /* --- Handlers for main bottom sheet user items --- */
+  // Handlers for main bottom sheet user items
   const bottomSheetRef = useRef(null);
   const userInfoModalRef = useRef(null);
   const snapPoints = useMemo(() => ['10%', '45%', '80%'], []);
   const openUserInfo = (user) => {
-    // Center map on user’s location with custom padding.
-    // This will offset the center upward so that the marker isn’t hidden by the bottom sheet.
     const cameraSettings = {
       centerCoordinate: [user.location.longitude, user.location.latitude],
       zoomLevel: 16,
@@ -642,23 +657,22 @@ export default function HomeScreen() {
     }
 
     bottomSheetRef.current?.close();
-    setSelectedUserInfo(user);
+    setSelectedUserId(user.uid);
   };
-
 
   const closeUserInfo = () => {
     userInfoModalRef.current?.dismiss();
-    setSelectedUserInfo(null);
+    setSelectedUserId(null);
     bottomSheetRef.current?.snapToIndex(1);
   };
 
   useEffect(() => {
-    if (selectedUserInfo && userInfoModalRef.current) {
+    if (selectedUser && userInfoModalRef.current) {
       userInfoModalRef.current.present();
     }
-  }, [selectedUserInfo]);
+  }, [selectedUser]);
 
-  /* --- Toggle tracking --- */
+  // Toggle tracking
   const toggleTracking = () => {
     if (!tracking) {
       setTracking(true);
@@ -676,7 +690,7 @@ export default function HomeScreen() {
     }
   };
 
-  /* --- Toggle heading --- */
+  // Toggle heading
   const resetHeading = () => {
     cameraRef.current?.setCamera({
       heading: 0,
@@ -684,7 +698,7 @@ export default function HomeScreen() {
     });
   };
 
-  /* --- Name validation and update --- */
+  // Name validation and update
   const validateName = (name) => {
     const regex = /^[A-Za-z]+$/;
     return name.trim().length > 0 && name.length <= 20 && regex.test(name);
@@ -720,7 +734,7 @@ export default function HomeScreen() {
     }
   };
 
-  /* --- Sign out --- */
+  // Sign out
   const handleSignOut = async () => {
     try {
       await signOut(auth);
@@ -729,7 +743,7 @@ export default function HomeScreen() {
     }
   };
 
-  /* --- Image upload handlers (unchanged) --- */
+  // Image upload handlers (unchanged)
   const IMGUR_CLIENT_ID = '4916641447bc9f6';
 
   const deleteImgurImage = async (deleteHash) => {
@@ -859,59 +873,27 @@ export default function HomeScreen() {
     }
   };
 
-  /* --- Reverse geocoding for user info modal --- */
-  const fetchReverseGeocode = async (lat, lon) => {
-    try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`,
-        {
-          headers: {
-            'User-Agent': 'loco_app/1.0 (loco@totob12.com)'
-          }
-        }
-      );
-      const data = await response.json();
-      if (data && data.display_name) {
-        setSelectedUserLocationName(data.display_name);
-      } else {
-        setSelectedUserLocationName("Location not found");
-      }
-    } catch (error) {
-      console.error("Error fetching reverse geocode:", error);
-      setSelectedUserLocationName("Error fetching location");
-    }
-  };
-
-  useEffect(() => {
-    if (selectedUserInfo) {
-      const loc = selectedUserInfo.location || null;
-      if (loc) {
-        fetchReverseGeocode(loc.latitude, loc.longitude);
-      }
-    }
-  }, [selectedUserInfo]);
-
-  /* --- Handlers for toggling sharing in user info modal --- */
+  // Handlers for toggling sharing in user info modal
   const handleToggleShare = async () => {
-    if (!selectedUserInfo) return;
+    if (!selectedUser) return;
     if (userSharingStatus.amSharing) {
-      await stopSharingLocation(auth.currentUser.uid, selectedUserInfo.uid);
+      await stopSharingLocation(auth.currentUser.uid, selectedUser.uid);
     } else {
-      await shareLocation(auth.currentUser.uid, selectedUserInfo.uid);
+      await shareLocation(auth.currentUser.uid, selectedUser.uid);
     }
   };
 
   const handleRemoveSharing = async () => {
-    if (!selectedUserInfo) return;
-    await stopReceivingLocation(auth.currentUser.uid, selectedUserInfo.uid);
+    if (!selectedUser) return;
+    await stopReceivingLocation(auth.currentUser.uid, selectedUser.uid);
     setTimeout(() => {
-      if (!receivingFromIds.includes(selectedUserInfo.uid)) {
+      if (!receivingFromIds.includes(selectedUser.uid)) {
         closeUserInfo();
       }
     }, 500);
   };
 
-  /* --- Compute sharing status for People modal item --- */
+  // Sharing status for People modal item
   const socialUserSharingStatus = selectedSocialUser
     ? {
       amSharing: sharingWithIds.includes(selectedSocialUser.uid),
@@ -919,26 +901,21 @@ export default function HomeScreen() {
     }
     : { amSharing: false, amReceiving: false };
 
-  /* --- Handlers for sharing options dialog in People modal --- */
   const handleDirections = () => {
-    if (!selectedUserInfo || !selectedUserInfo.location) return;
-    const { latitude, longitude } = selectedUserInfo.location;
+    if (!selectedUser || !selectedUser.location) return;
+    const { latitude, longitude } = selectedUser.location;
     showLocation({
       latitude: latitude,
       longitude: longitude,
-      title: `${selectedUserInfo.firstName || 'User'} ${selectedUserInfo.lastName || ''}`,
+      title: `${selectedUser.firstName || 'User'} ${selectedUser.lastName || ''}`,
       dialogTitle: 'This is the dialog Title',
     });
   };
 
-  /* -------------------------
-     Render
-  ------------------------- */
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <BottomSheetModalProvider>
         <View style={styles.container}>
-          {/* Full-screen Map */}
           <MapView
             style={StyleSheet.absoluteFillObject}
             attributionEnabled={false}
@@ -951,7 +928,6 @@ export default function HomeScreen() {
             <LocationPuck
               topImage="topImage"
               visible={true}
-              // scale={['interpolate', ['linear'], ['zoom'], 10, 1.0, 20, 4.0]}
               pulsing={{
                 isEnabled: true,
                 color: COLORS.navy,
@@ -1011,7 +987,7 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* ------------- Settings Modal ------------- */}
+          {/* Settings Modal */}
           <Modal
             animationType="slide"
             transparent={false}
@@ -1080,7 +1056,7 @@ export default function HomeScreen() {
             </SafeAreaView>
           </Modal>
 
-          {/* ------------- People (Social) Modal ------------- */}
+          {/* People (Social) Modal */}
           <Modal
             animationType="slide"
             transparent={false}
@@ -1088,8 +1064,6 @@ export default function HomeScreen() {
             onRequestClose={() => setShowSocial(false)}
           >
             <SafeAreaView style={styles.modalContainer}>
-
-              {/* ------------- Sharing Options Modal (for People modal items) ------------- */}
               {selectedSocialUser && (
                 <Animated.View style={[dialogStyles.overlay, { opacity: fadeAnim }]}>
                   <TouchableOpacity
@@ -1211,7 +1185,7 @@ export default function HomeScreen() {
             </SafeAreaView>
           </Modal>
 
-          {/* ------------- Main Bottom Sheet (for users sharing with you) ------------- */}
+          {/* Main Bottom Sheet (for users sharing with you) */}
           <BottomSheet
             ref={bottomSheetRef}
             index={1}
@@ -1242,7 +1216,7 @@ export default function HomeScreen() {
             </BottomSheetScrollView>
           </BottomSheet>
 
-          {/* ------------- User Info Bottom Sheet Modal (for map items) ------------- */}
+          {/* User Info Bottom Sheet Modal */}
           <BottomSheetModal
             ref={userInfoModalRef}
             index={0}
@@ -1251,11 +1225,11 @@ export default function HomeScreen() {
             onDismiss={closeUserInfo}
             backgroundStyle={{ borderRadius: 20 }}
           >
-            {selectedUserInfo && (
+            {selectedUser && (
               <BottomSheetScrollView style={{ paddingLeft: 20, paddingRight: 20 }}>
                 <View style={styles.userInfoHeader}>
                   <Text style={styles.userInfoName}>
-                    {(`${selectedUserInfo.firstName || ''} ${selectedUserInfo.lastName || ''}`).trim()}
+                    {(`${selectedUser.firstName || ''} ${selectedUser.lastName || ''}`).trim()}
                   </Text>
                   <TouchableOpacity style={styles.userInfoCloseButton} onPress={closeUserInfo}>
                     <MaterialIcons name="close" size={24} color="#000" />
@@ -1265,7 +1239,7 @@ export default function HomeScreen() {
                   {selectedUserLocationName ? selectedUserLocationName : "Loading location..."}
                 </Text>
                 <Text style={styles.userInfoTimestamp}>
-                  <LiveTimeAgo timestamp={selectedUserInfo.locationTimestamp} />
+                  <LiveTimeAgo timestamp={selectedUser.locationTimestamp} />
                 </Text>
 
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginVertical: 10, alignItems: 'stretch' }}>
@@ -1292,7 +1266,7 @@ export default function HomeScreen() {
                           <Text style={styles.cardTitle}>Directions</Text>
                           <LiveDistance
                             currentLocation={currentLocation}
-                            userLocation={selectedUserInfo.location}
+                            userLocation={selectedUser.location}
                             textStyle={styles.cardSubtitle}
                           />
                         </View>
@@ -1311,7 +1285,7 @@ export default function HomeScreen() {
                   {userSharingStatus.amReceiving && (
                     <TouchableOpacity style={styles.userInfoButton} onPress={handleRemoveSharing}>
                       <Text style={styles.userInfoButtonText}>
-                        Remove {selectedUserInfo.firstName}
+                        Remove {selectedUser.firstName}
                       </Text>
                     </TouchableOpacity>
                   )}
@@ -1564,13 +1538,11 @@ const styles = StyleSheet.create({
     color: '#888',
   },
   userInfoButtonsContainer: {
-    // width: '100%',
     padding: 5,
     backgroundColor: COLORS.white,
     borderRadius: 10,
   },
   userInfoButton: {
-    // backgroundColor: "red",
     padding: 5,
     borderRadius: 5,
     marginVertical: 5,
