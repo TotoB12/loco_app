@@ -228,33 +228,38 @@ const SocialUserItem = ({ user, sharingWithIds, receivingFromIds, onPress }) => 
     setStatusText(text);
   }, [user, sharingWithIds, receivingFromIds]);
   return (
-    <ListItem bottomDivider onPress={() => onPress(user)}>
-      <Avatar
-        rounded
-        source={
-          user.avatar && user.avatar.link
-            ? { uri: user.avatar.link }
-            : { uri: "data:image/png" }
-        }
-        icon={
-          !user.avatar || !user.avatar.link
-            ? { name: 'person-outline', type: 'material', size: 26 }
-            : undefined
-        }
-        size={30}
-        containerStyle={
-          !user.avatar || !user.avatar.link
-            ? { backgroundColor: '#c2c2c2' }
-            : {}
-        }
-      />
-      <ListItem.Content>
-        <ListItem.Title>
-          {(`${user.firstName || ''} ${user.lastName || ''}`).trim()}
-        </ListItem.Title>
-        <ListItem.Subtitle>{statusText}</ListItem.Subtitle>
-      </ListItem.Content>
-    </ListItem>
+    <View>
+      <ListItem onPress={() => onPress(user)}>
+        <Avatar
+          rounded
+          source={
+            user.avatar && user.avatar.link
+              ? { uri: user.avatar.link }
+              : { uri: "data:image/png" }
+          }
+          icon={
+            !user.avatar || !user.avatar.link
+              ? { name: 'person-outline', type: 'material', size: 26 }
+              : undefined
+          }
+          size={40}
+          containerStyle={
+            !user.avatar || !user.avatar.link
+              ? { backgroundColor: '#c2c2c2' }
+              : {}
+          }
+        />
+        <View style={{ flex: 1 }}>
+          <View style={styles.userItemHeader}>
+            <Text style={styles.userNameText}>
+              {(`${user.firstName || ''} ${user.lastName || ''}`).trim()}
+            </Text>
+          </View>
+          <Text style={styles.timestampText}>{statusText}</Text>
+        </View>
+      </ListItem>
+      <Divider style={{ width: '80%', alignSelf: 'center' }} />
+    </View>
   );
 };
 
