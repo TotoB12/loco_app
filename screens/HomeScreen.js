@@ -86,7 +86,7 @@ const LiveTimeAgo = ({ timestamp }) => {
   return <Text>{timeAgo}</Text>;
 };
 
-const LiveDistance = ({ currentLocation, userLocation }) => {
+const LiveDistance = ({ currentLocation, userLocation, textStyle = styles.distanceText }) => {
   const [distanceText, setDistanceText] = useState("");
   useEffect(() => {
     const calculateDistance = () => {
@@ -106,7 +106,7 @@ const LiveDistance = ({ currentLocation, userLocation }) => {
     const interval = setInterval(calculateDistance, 2000);
     return () => clearInterval(interval);
   }, [currentLocation, userLocation]);
-  return <Text style={styles.distanceText}>{distanceText}</Text>;
+  return <Text style={textStyle}>{distanceText}</Text>;
 };
 
 /* -------------------------
@@ -194,7 +194,7 @@ const BottomSheetUserItem = ({ user, currentLocation, onPress }) => {
             <Text style={styles.userNameText}>
               {(`${user.firstName || ''} ${user.lastName || ''}`).trim()}
             </Text>
-            <LiveDistance currentLocation={currentLocation} userLocation={user.location} />
+            <LiveDistance currentLocation={currentLocation} userLocation={user.location} textStyle={styles.distanceText} />
           </View>
           <Text style={styles.timestampText}>
             <LiveTimeAgo timestamp={user.locationTimestamp} />
@@ -1285,7 +1285,11 @@ export default function HomeScreen() {
                         </View>
                         <View>
                           <Text style={styles.cardTitle}>Directions</Text>
-                          <Text style={styles.cardSubtitle}>placeholder</Text>
+                          <LiveDistance
+                            currentLocation={currentLocation}
+                            userLocation={selectedUserInfo.location}
+                            textStyle={styles.cardSubtitle}
+                          />
                         </View>
                       </View>
                     </Card>
@@ -1551,7 +1555,7 @@ const styles = StyleSheet.create({
   },
   cardSubtitle: {
     marginTop: 5,
-    fontSize: 12,
+    fontSize: 14,
     color: '#888',
   },
   userInfoButtonsContainer: {
