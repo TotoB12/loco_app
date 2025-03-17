@@ -285,6 +285,9 @@ export default function HomeScreen() {
   const [tracking, setTracking] = useState(false);
   const [heading, setHeading] = useState(0);
 
+  const [followingUserId, setFollowingUserId] = useState(null);
+  const [isUpdatingCamera, setIsUpdatingCamera] = useState(false);
+
   // Modal & UI state
   const [showSettings, setShowSettings] = useState(false);
   const [settingsFirstName, setSettingsFirstName] = useState('');
@@ -301,14 +304,11 @@ export default function HomeScreen() {
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState([]);
 
-  // Real‑time sharing list states
+  // Real-time sharing list states
   const [sharingWithIds, setSharingWithIds] = useState([]);
   const [receivingFromIds, setReceivingFromIds] = useState([]);
-  const [sharingWithData, setSharingWithData] = useState({}); // keyed by uid
-  const [receivingFromData, setReceivingFromData] = useState({}); // keyed by uid
-
-  // Instead of storing the full selected user, store only the selectedUserId.
-  // We then compute the selected user from our shared realtime data.
+  const [sharingWithData, setSharingWithData] = useState({});
+  const [receivingFromData, setReceivingFromData] = useState({});
   const [selectedUserId, setSelectedUserId] = useState(null);
   const selectedUser = useMemo(() => {
     if (!selectedUserId) return null;
@@ -333,6 +333,19 @@ export default function HomeScreen() {
   const { height: screenHeight } = Dimensions.get('window');
   const BOTTOM_SHEET_PERCENTAGE = 0.32;
   const bottomInset = screenHeight * BOTTOM_SHEET_PERCENTAGE;
+
+  const updateCameraToUser = (user) => {
+    if (!user || !user.location) return;
+    setIsUpdatingCamera(true);
+    cameraRef.current?.setCamera({
+      centerCoordinate: [user.location.longitude, user.location.latitude],
+      zoomLevel: 16,
+      padding: { paddingTop: 0, paddingRight: 0, paddingBottom: bottomInset, paddingLeft: 0 },
+      animationMode: 'easeTo',
+      animationDuration: 1000,
+    });
+    setTimeout(() => setIsUpdatingCamera(false), 1100);
+  };
 
   useEffect(() => {
     if (!showSocial) {
@@ -551,6 +564,12 @@ export default function HomeScreen() {
     };
   }, [selectedUserId, sharingWithIds, receivingFromIds]);
 
+  useEffect(() => {
+    if (followingUserId && selectedUser && selectedUser.uid === followingUserId) {
+      updateCameraToUser(selectedUser);
+    }
+  }, [selectedUser?.location?.latitude, selectedUser?.location?.longitude, followingUserId]);
+
   // Reverse geocode for user info modal: update whenever the selected user's location changes
   const [selectedUserLocationName, setSelectedUserLocationName] = useState("");
   const fetchReverseGeocode = async (lat, lon) => {
@@ -587,34 +606,22 @@ export default function HomeScreen() {
   };
 
   // Handlers for main bottom sheet user items
+  // **Modified openUserInfo to Initiate Following**
   const bottomSheetRef = useRef(null);
   const userInfoModalRef = useRef(null);
   const snapPoints = useMemo(() => ['10%', '45%', '80%'], []);
   const openUserInfo = (user) => {
-    const cameraSettings = {
-      centerCoordinate: [user.location.longitude, user.location.latitude],
-      zoomLevel: 16,
-      padding: { paddingTop: 0, paddingRight: 0, paddingBottom: bottomInset, paddingLeft: 0 },
-      animationMode: 'flyTo',
-      animationDuration: 1000,
-    };
-
-    if (tracking) {
-      setTracking(false);
-      setTimeout(() => {
-        cameraRef.current?.setCamera(cameraSettings);
-      }, 150);
-    } else {
-      cameraRef.current?.setCamera(cameraSettings);
-    }
-
-    bottomSheetRef.current?.close();
     setSelectedUserId(user.uid);
+    setFollowingUserId(user.uid); // Start following the user
+    updateCameraToUser(user); // Initial camera move
+    bottomSheetRef.current?.close();
   };
 
+  // **Modified closeUserInfo to Stop Following**
   const closeUserInfo = () => {
     userInfoModalRef.current?.dismiss();
     setSelectedUserId(null);
+    setFollowingUserId(null); // Stop following
     bottomSheetRef.current?.snapToIndex(1);
   };
 
@@ -623,6 +630,13 @@ export default function HomeScreen() {
       userInfoModalRef.current.present();
     }
   }, [selectedUser]);
+
+  const handleCameraChanged = (event) => {
+    setHeading(event.properties.heading);
+    if (!isUpdatingCamera && followingUserId) {
+      setFollowingUserId(null); // Stop following if user interacts with the map
+    }
+  };
 
   // Toggle tracking
   const toggleTracking = () => {
@@ -875,7 +889,7 @@ export default function HomeScreen() {
             scaleBarEnabled={false}
             compassEnabled={false}
             pitchEnabled={false}
-            onCameraChanged={(event) => setHeading(event.properties.heading)}
+            onCameraChanged={handleCameraChanged}
           >
             <LocationPuck
               topImage="topImage"
@@ -1133,7 +1147,7 @@ export default function HomeScreen() {
             </SafeAreaView>
           </Modal>
 
-          {/* Main Bottom Sheet (for users sharing with you) */}
+          {/* Main Bottom Sheet */}
           <BottomSheet
             ref={bottomSheetRef}
             index={1}

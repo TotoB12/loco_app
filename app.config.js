@@ -66,6 +66,7 @@ export default ({ config }) => {
       "supportsTablet": true,
       "bundleIdentifier": "com.antoninbeliard.loco",
       "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
         "UIBackgroundModes": [
           "location",
           "fetch"

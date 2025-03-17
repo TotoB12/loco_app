@@ -1840,6 +1840,307 @@ const SharingStyles = StyleSheet.create({
 });
 ```
 
+screens/LoadingScreen.js
+```javascript
+// screens/LoadingScreen.js
+import React from 'react';
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { COLORS } from '../colors';
+
+export default function LoadingScreen() {
+  return (
+    <View style={styles.container}>
+      <ActivityIndicator size="large" color={COLORS.blue} />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});
+```
+
+screen/LoginScreen.js
+```javascript
+// screens/LoginScreen.js
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  Alert,
+  StyleSheet,
+  KeyboardAvoidingView,
+  ScrollView,
+  Platform,
+} from 'react-native';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '../firebaseConfig';
+
+import { COLORS } from '../colors';
+
+export default function LoginScreen({ navigation }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
+  const handleLogin = async () => {
+    try {
+      if (!email || !password) {
+        Alert.alert('Error', 'Please fill in all fields');
+        return;
+      }
+
+      await signInWithEmailAndPassword(auth, email.trim(), password);
+      // On success, the user is automatically tracked by `onAuthStateChanged`
+      // in App.js, which navigates them to Home screen
+    } catch (error) {
+      Alert.alert('Login Error', error.message);
+    }
+  };
+
+  return (
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <ScrollView
+        contentContainerStyle={styles.scrollContainer}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.inner}>
+          <Text style={styles.title}>Login</Text>
+
+          <TextInput
+            style={styles.input}
+            placeholder="Email"
+            placeholderTextColor="#999"
+            value={email}
+            onChangeText={(text) => setEmail(text)}
+            keyboardType="email-address"
+            autoCapitalize="none"
+          />
+
+          <TextInput
+            style={styles.input}
+            placeholder="Password"
+            placeholderTextColor="#999"
+            secureTextEntry
+            value={password}
+            onChangeText={(text) => setPassword(text)}
+          />
+
+          <TouchableOpacity style={styles.button} onPress={handleLogin}>
+            <Text style={styles.buttonText}>Log In</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={() => navigation.navigate('Signup')}>
+            <Text style={{ marginTop: 20, color: COLORS.navy }}>
+              Don’t have an account? Sign up
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+}
+
+const styles = StyleSheet.create({
+  scrollContainer: {
+    flexGrow: 1,
+  },
+  inner: {
+    flex: 1,
+    padding: 20,
+    justifyContent: 'center',
+    backgroundColor: COLORS.white,
+  },
+  title: {
+    fontSize: 32,
+    color: COLORS.black,
+    marginBottom: 30,
+    textAlign: 'center',
+  },
+  input: {
+    width: '100%',
+    height: 50,
+    backgroundColor: COLORS.white,
+    borderRadius: 5,
+    paddingHorizontal: 15,
+    color: COLORS.black,
+    marginBottom: 15,
+  },
+  button: {
+    height: 50,
+    backgroundColor: COLORS.blue,
+    borderRadius: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 15,
+  },
+  buttonText: {
+    color: COLORS.white,
+    fontSize: 18,
+  },
+});
+```
+
+screens/SignupScreen.js
+```javascript
+// screens/SignupScreen.js
+import React, { useState } from 'react';
+import {
+    View,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    Alert,
+    StyleSheet,
+    KeyboardAvoidingView,
+    ScrollView,
+    Platform,
+} from 'react-native';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { ref, set } from 'firebase/database';
+
+import { auth, db } from '../firebaseConfig';
+import { COLORS } from '../colors';
+
+export default function SignupScreen({ navigation }) {
+    const [firstName, setFirstName] = useState('');
+    const [lastName, setLastName] = useState('');
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+
+    const handleSignup = async () => {
+        try {
+            if (!firstName || !lastName || !email || !password) {
+                Alert.alert('Error', 'Please fill in all fields');
+                return;
+            }
+            const userCredential = await createUserWithEmailAndPassword(
+                auth,
+                email.trim(),
+                password
+            );
+            const user = userCredential.user;
+            // Save user data to the Realtime Database
+            await set(ref(db, 'users/' + user.uid), {
+                createdAt: { ".sv": "timestamp" },
+                firstName: firstName.trim(),
+                lastName: lastName.trim(),
+                email: email.trim(),
+            });
+            Alert.alert('Success', 'Account created successfully');
+        } catch (error) {
+            Alert.alert('Signup Error', error.message);
+        }
+    };
+
+    return (
+        <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+            <ScrollView
+                contentContainerStyle={styles.scrollContainer}
+                keyboardShouldPersistTaps="handled"
+            >
+                <View style={styles.inner}>
+                    <Text style={styles.title}>Sign Up</Text>
+
+                    <TextInput
+                        style={styles.input}
+                        placeholder="First Name"
+                        placeholderTextColor="#999"
+                        value={firstName}
+                        onChangeText={setFirstName}
+                    />
+                    <TextInput
+                        style={styles.input}
+                        placeholder="Last Name"
+                        placeholderTextColor="#999"
+                        value={lastName}
+                        onChangeText={setLastName}
+                    />
+                    <TextInput
+                        style={styles.input}
+                        placeholder="Email"
+                        placeholderTextColor="#999"
+                        value={email}
+                        onChangeText={setEmail}
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                    />
+                    <TextInput
+                        style={styles.input}
+                        placeholder="Password"
+                        placeholderTextColor="#999"
+                        secureTextEntry
+                        value={password}
+                        onChangeText={setPassword}
+                    />
+
+                    <TouchableOpacity style={styles.button} onPress={handleSignup}>
+                        <Text style={styles.buttonText}>Create Account</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+                        <Text style={{ marginTop: 20, color: '#0275d8' }}>
+                            Already have an account? Log in
+                        </Text>
+                    </TouchableOpacity>
+                </View>
+            </ScrollView>
+        </KeyboardAvoidingView>
+    );
+}
+
+const styles = StyleSheet.create({
+    scrollContainer: {
+        flexGrow: 1,
+    },
+    inner: {
+        flex: 1,
+        padding: 20,
+        justifyContent: 'center',
+        backgroundColor: COLORS.white,
+    },
+    title: {
+        fontSize: 32,
+        color: COLORS.black,
+        marginBottom: 30,
+        textAlign: 'center',
+    },
+    input: {
+        width: '100%',
+        height: 50,
+        backgroundColor: COLORS.white,
+        borderRadius: 5,
+        paddingHorizontal: 15,
+        color: '#fff',
+        marginBottom: 15,
+    },
+    button: {
+        height: 50,
+        backgroundColor: COLORS.blue,
+        borderRadius: 5,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: 15,
+    },
+    buttonText: {
+        color: COLORS.white,
+        fontSize: 18,
+    },
+});
+```
+
 sharingUtils.js
 ```javascript
 // sharingUtils.js
@@ -2345,5 +2646,6 @@ app.listen(PORT, () => {
 });
 ```
 
-This setup works, but I need to fix a few things. When the user info bottom sheet modal is opened for a user, that user is currently zoomed into on the map. This is great, but if that user is moving then the map doesnt follow. I need the map to "track/follow" that user's marker, until I re-move the map myself, or close the user info bottom sheet modal.
-I want you to fully develop and implement this.
+This setup works, but I need to replace a few things.
+The app currently has a Login and a Signup screen, and uses email for accounts. I want to replace this system to use phone numbers instead: only one screen is needed, where users will enter their phone number: it should then have a "swipe" animation where it will ask the user for the login SSM code. If this is a new user, they should then be prompted to give their first and last name: the app needs to make sure that no users gets created without a first and last name. These forms should have "Next" buttons to go to the next step. Anytime a user logs in or signs up, the last "form" should prompt them to add a profile picture/avatar (only if their "avatar" element doesnt exist/is empty in the database). The final page (no matter if this is a new or returning user) should be a "You're all set! Welcome to Loco" page.
+I want you to fully develop and implement this. This should all be done within one screen JS file.
