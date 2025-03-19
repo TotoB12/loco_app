@@ -1011,8 +1011,8 @@ export default function HomeScreen() {
                 />
               </ScrollView>
               <View style={styles.modalFooter}>
+              <Text>Don't login to multiple phone, this will break.</Text>
                 <TouchableOpacity style={styles.logoutButton} onPress={handleSignOut}>
-                  <Text>Don't login to multiple phone, this will break.</Text>
                   <Text style={styles.logoutButtonText}>Log Out</Text>
                 </TouchableOpacity>
               </View>

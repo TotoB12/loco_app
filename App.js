@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
-import { ref, update } from '@react-native-firebase/database';
+import { ref, onValue } from '@react-native-firebase/database';
 import { auth, db } from './firebaseConfig';
 import Radar from 'react-native-radar';
 import * as Location from 'expo-location';
@@ -12,7 +12,7 @@ import { Linking, Platform } from 'react-native';
 // Screens
 import PermissionScreen from './screens/PermissionScreen';
 import LoadingScreen from './screens/LoadingScreen';
-import PhoneAuthScreen from './screens/PhoneAuthScreen'; // Replace LoginScreen and SignupScreen
+import PhoneAuthScreen from './screens/PhoneAuthScreen';
 import HomeScreen from './screens/HomeScreen';
 
 const Stack = createStackNavigator();
@@ -22,6 +22,7 @@ export default function App() {
   const [hasLocationPermissions, setHasLocationPermissions] = useState(false);
   const [permissionErrorMessage, setPermissionErrorMessage] = useState('');
   const [user, setUser] = useState(null);
+  const [onboardingCompleted, setOnboardingCompleted] = useState(null); // Initially null to indicate loading
   const [initializing, setInitializing] = useState(true);
 
   // Check Location Permissions
@@ -78,72 +79,96 @@ export default function App() {
     };
   }, [hasLocationPermissions]);
 
-  // Auth Listener and Radar Trip
+  // Auth Listener and Onboarding Check
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged(async (currentUser) => {
+    let unsubscribeDb;
+    const unsubscribeAuth = auth.onAuthStateChanged((currentUser) => {
       setUser(currentUser);
-      setInitializing(false);
-
       if (currentUser) {
+        const userRef = ref(db, `users/${currentUser.uid}`);
+        unsubscribeDb = onValue(
+          userRef,
+          (snapshot) => {
+            if (snapshot.exists()) {
+              const userData = snapshot.val();
+              setOnboardingCompleted(!!userData.onboardingCompleted);
+            } else {
+              setOnboardingCompleted(false); // New user, onboarding not completed
+            }
+            if (initializing) setInitializing(false); // Only set initializing false after first data fetch
+          },
+          (error) => {
+            console.error('Error listening to user data:', error);
+            setOnboardingCompleted(false);
+            if (initializing) setInitializing(false);
+          }
+        );
+
         Radar.setUserId(currentUser.uid);
         Radar.setDescription(currentUser.phoneNumber || 'Radar User');
         Radar.setMetadata({ role: 'tester' });
 
-        try {
-          const fgStatus = await Radar.requestPermissions(false);
-          console.log('Foreground perms =>', fgStatus);
-          if (fgStatus === 'GRANTED_FOREGROUND') {
-            const bgStatus = await Radar.requestPermissions(true);
-            console.log('Background perms =>', bgStatus);
+        (async () => {
+          try {
+            const fgStatus = await Radar.requestPermissions(false);
+            console.log('Foreground perms =>', fgStatus);
+            if (fgStatus === 'GRANTED_FOREGROUND') {
+              const bgStatus = await Radar.requestPermissions(true);
+              console.log('Background perms =>', bgStatus);
+            }
+          } catch (err) {
+            console.error('Error requesting Radar permissions =>', err);
           }
-        } catch (err) {
-          console.error('Error requesting Radar permissions =>', err);
-        }
 
-        if (hasLocationPermissions) {
-          Radar.setForegroundServiceOptions({
-            text: 'Location tracking is active',
-            title: 'Tracking in background',
-            updatesOnly: false,
-            importance: 2,
-          });
+          if (hasLocationPermissions) {
+            Radar.setForegroundServiceOptions({
+              text: 'Location tracking is active',
+              title: 'Tracking in background',
+              updatesOnly: false,
+              importance: 2,
+            });
 
-          Radar.startTrip({
-            tripOptions: {
-              externalId: currentUser.uid,
-            },
-            trackingOptions: {
-              desiredStoppedUpdateInterval: 120,
-              fastestStoppedUpdateInterval: 60,
-              desiredMovingUpdateInterval: 30,
-              fastestMovingUpdateInterval: 15,
-              desiredSyncInterval: 20,
-              desiredAccuracy: 'high',
-              stopDuration: 140,
-              stopDistance: 70,
-              replay: 'none',
-              sync: 'all',
-              useStoppedGeofence: false,
-              showBlueBar: false,
-              syncGeofences: false,
-              syncGeofencesLimit: 0,
-              beacons: false,
-              foregroundServiceEnabled: true,
-            },
-          }).then((result) => {
-            console.log('Radar trip started =>', result);
-          });
-        }
+            Radar.startTrip({
+              tripOptions: { externalId: currentUser.uid },
+              trackingOptions: {
+                desiredStoppedUpdateInterval: 120,
+                fastestStoppedUpdateInterval: 60,
+                desiredMovingUpdateInterval: 30,
+                fastestMovingUpdateInterval: 15,
+                desiredSyncInterval: 20,
+                desiredAccuracy: 'high',
+                stopDuration: 140,
+                stopDistance: 70,
+                replay: 'none',
+                sync: 'all',
+                useStoppedGeofence: false,
+                showBlueBar: false,
+                syncGeofences: false,
+                syncGeofencesLimit: 0,
+                beacons: false,
+                foregroundServiceEnabled: true,
+              },
+            }).then((result) => {
+              console.log('Radar trip started =>', result);
+            });
+          }
+        })();
       } else {
+        setOnboardingCompleted(false);
+        if (unsubscribeDb) unsubscribeDb();
         Radar.stopTracking();
+        if (initializing) setInitializing(false);
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeDb) unsubscribeDb();
+    };
   }, [hasLocationPermissions]);
 
   // Conditional Rendering
-  if (isCheckingPermissions || initializing) {
+  if (isCheckingPermissions || initializing || onboardingCompleted === null) {
     return <LoadingScreen />;
   }
 
@@ -159,10 +184,14 @@ export default function App() {
   return (
     <NavigationContainer>
       <Stack.Navigator>
-        {user ? (
+        {user && onboardingCompleted ? (
           <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
         ) : (
-          <Stack.Screen name="PhoneAuth" component={PhoneAuthScreen} options={{ headerShown: false }} />
+          <Stack.Screen
+            name="PhoneAuth"
+            component={PhoneAuthScreen}
+            options={{ headerShown: false }}
+          />
         )}
       </Stack.Navigator>
     </NavigationContainer>
