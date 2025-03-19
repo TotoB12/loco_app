@@ -15,9 +15,9 @@ import {
   Dimensions
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { signOut } from 'firebase/auth';
+import { signOut } from '@react-native-firebase/auth';
+import { ref, onValue, update, get } from '@react-native-firebase/database';
 import { auth, db } from '../firebaseConfig';
-import { ref, onValue, update, get } from 'firebase/database';
 import Radar from 'react-native-radar';
 import Mapbox, { MapView, LocationPuck, MarkerView, Camera, UserTrackingMode } from '@rnmapbox/maps';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -1012,6 +1012,7 @@ export default function HomeScreen() {
               </ScrollView>
               <View style={styles.modalFooter}>
                 <TouchableOpacity style={styles.logoutButton} onPress={handleSignOut}>
+                  <Text>Don't login to multiple phone, this will break.</Text>
                   <Text style={styles.logoutButtonText}>Log Out</Text>
                 </TouchableOpacity>
               </View>

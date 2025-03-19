@@ -59,9 +59,20 @@ export default ({ config }) => {
           "imageWidth": 200
         }
       ],
-      ["react-native-map-link"]
+      ["react-native-map-link"],
+      ["@react-native-firebase/app"],
+      ["@react-native-firebase/auth"],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static"
+          }
+        }
+      ]
     ],
     "ios": {
+      "googleServicesFile": "./GoogleService-Info.plist",
       "buildNumber": "0.1.5",
       "supportsTablet": true,
       "bundleIdentifier": "com.antoninbeliard.loco",
@@ -77,6 +88,7 @@ export default ({ config }) => {
       }
     },
     "android": {
+      "googleServicesFile": "./google-services.json",
       "package": "com.antoninbeliard.loco",
       "icon": "./assets/icon.png",
       "permissions": [

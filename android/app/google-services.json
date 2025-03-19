@@ -1,0 +1,55 @@
+{
+  "project_info": {
+    "project_number": "1079141322842",
+    "firebase_url": "https://totob12-loco-default-rtdb.firebaseio.com",
+    "project_id": "totob12-loco",
+    "storage_bucket": "totob12-loco.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1079141322842:android:939d41763fc51432f30863",
+        "android_client_info": {
+          "package_name": "com.antoninbeliard.loco"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1079141322842-00anr325gr4lasfho6cm572gkcpidv5f.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.antoninbeliard.loco",
+            "certificate_hash": "3d90b6bb92836f51ecc5cda0012066bf83a65c64"
+          }
+        },
+        {
+          "client_id": "1079141322842-hsappvikbv6gq3v6rvka6pbbj0f8nesj.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCEWVyhj0BfCSJYibU3flpTBAQmNMVUZdc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1079141322842-hsappvikbv6gq3v6rvka6pbbj0f8nesj.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "1079141322842-m2bha3sheb71rau0dmdc19g1ou8o99i8.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.antoninbeliard.loco"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
