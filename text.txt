@@ -14,7 +14,7 @@ import { auth, db } from './firebaseConfig';
 import Radar from 'react-native-radar';
 import * as Location from 'expo-location';
 import * as IntentLauncher from 'expo-intent-launcher';
-import { Linking, Platform } from 'react-native';
+import { Linking, Platform, AppState } from 'react-native';
 
 // Screens
 import PermissionScreen from './screens/PermissionScreen';
@@ -29,44 +29,58 @@ export default function App() {
   const [hasLocationPermissions, setHasLocationPermissions] = useState(false);
   const [permissionErrorMessage, setPermissionErrorMessage] = useState('');
   const [user, setUser] = useState(null);
-  const [onboardingCompleted, setOnboardingCompleted] = useState(null); // Initially null to indicate loading
+  const [onboardingCompleted, setOnboardingCompleted] = useState(null);
   const [initializing, setInitializing] = useState(true);
 
-  // Check Location Permissions
-  useEffect(() => {
-    (async () => {
-      try {
-        let fg = await Location.getForegroundPermissionsAsync();
+  // Function to check location permissions
+  const checkLocationPermissions = async (isInitial = false) => {
+    if (isInitial) setIsCheckingPermissions(true);
+    try {
+      let fg = await Location.getForegroundPermissionsAsync();
+      if (fg.status !== 'granted') {
+        fg = await Location.requestForegroundPermissionsAsync();
         if (fg.status !== 'granted') {
-          fg = await Location.requestForegroundPermissionsAsync();
-          if (fg.status !== 'granted') {
-            setPermissionErrorMessage('App needs "While Using" location to function.');
-            setHasLocationPermissions(false);
-            setIsCheckingPermissions(false);
-            return;
-          }
+          setPermissionErrorMessage('App needs "While Using" location to function.');
+          setHasLocationPermissions(false);
+          return;
         }
+      }
 
-        let bg = await Location.getBackgroundPermissionsAsync();
-        if (bg.status !== 'granted') {
-          bg = await Location.requestBackgroundPermissionsAsync();
-        }
-
+      let bg = await Location.getBackgroundPermissionsAsync();
+      if (bg.status !== 'granted') {
+        bg = await Location.requestBackgroundPermissionsAsync();
         if (bg.status !== 'granted') {
           setPermissionErrorMessage('Please grant "Allow All the Time" location in Settings.');
           setHasLocationPermissions(false);
-        } else {
-          setPermissionErrorMessage('');
-          setHasLocationPermissions(true);
+          return;
         }
-      } catch (err) {
-        console.log('Error checking permissions =>', err);
-        setPermissionErrorMessage('Error checking permissions. Please enable them in Settings.');
-        setHasLocationPermissions(false);
-      } finally {
-        setIsCheckingPermissions(false);
       }
-    })();
+
+      setPermissionErrorMessage('');
+      setHasLocationPermissions(true);
+    } catch (err) {
+      console.log('Error checking permissions =>', err);
+      setPermissionErrorMessage('Error checking permissions. Please enable them in Settings.');
+      setHasLocationPermissions(false);
+    } finally {
+      if (isInitial) setIsCheckingPermissions(false);
+    }
+  };
+
+  // Permission checking with AppState listener
+  useEffect(() => {
+    // Initial check
+    checkLocationPermissions(true);
+
+    // Listen for app state changes
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        checkLocationPermissions(false);
+      }
+    });
+
+    // Cleanup listener
+    return () => subscription.remove();
   }, []);
 
   // Radar Setup
@@ -86,7 +100,7 @@ export default function App() {
     };
   }, [hasLocationPermissions]);
 
-  // Auth Listener and Onboarding Check
+  // Auth Listener and Radar Trip Start
   useEffect(() => {
     let unsubscribeDb;
     const unsubscribeAuth = auth.onAuthStateChanged((currentUser) => {
@@ -100,9 +114,9 @@ export default function App() {
               const userData = snapshot.val();
               setOnboardingCompleted(!!userData.onboardingCompleted);
             } else {
-              setOnboardingCompleted(false); // New user, onboarding not completed
+              setOnboardingCompleted(false);
             }
-            if (initializing) setInitializing(false); // Only set initializing false after first data fetch
+            if (initializing) setInitializing(false);
           },
           (error) => {
             console.error('Error listening to user data:', error);
@@ -115,51 +129,40 @@ export default function App() {
         Radar.setDescription(currentUser.phoneNumber || 'Radar User');
         Radar.setMetadata({ role: 'tester' });
 
-        (async () => {
-          try {
-            const fgStatus = await Radar.requestPermissions(false);
-            console.log('Foreground perms =>', fgStatus);
-            if (fgStatus === 'GRANTED_FOREGROUND') {
-              const bgStatus = await Radar.requestPermissions(true);
-              console.log('Background perms =>', bgStatus);
-            }
-          } catch (err) {
-            console.error('Error requesting Radar permissions =>', err);
-          }
+        if (hasLocationPermissions) {
+          Radar.setForegroundServiceOptions({
+            text: 'Location tracking is active',
+            title: 'Tracking in background',
+            updatesOnly: false,
+            importance: 2,
+          });
 
-          if (hasLocationPermissions) {
-            Radar.setForegroundServiceOptions({
-              text: 'Location tracking is active',
-              title: 'Tracking in background',
-              updatesOnly: false,
-              importance: 2,
-            });
-
-            Radar.startTrip({
-              tripOptions: { externalId: currentUser.uid },
-              trackingOptions: {
-                desiredStoppedUpdateInterval: 120,
-                fastestStoppedUpdateInterval: 60,
-                desiredMovingUpdateInterval: 30,
-                fastestMovingUpdateInterval: 15,
-                desiredSyncInterval: 20,
-                desiredAccuracy: 'high',
-                stopDuration: 140,
-                stopDistance: 70,
-                replay: 'none',
-                sync: 'all',
-                useStoppedGeofence: false,
-                showBlueBar: false,
-                syncGeofences: false,
-                syncGeofencesLimit: 0,
-                beacons: false,
-                foregroundServiceEnabled: true,
-              },
-            }).then((result) => {
-              console.log('Radar trip started =>', result);
-            });
-          }
-        })();
+          Radar.startTrip({
+            tripOptions: { externalId: currentUser.uid },
+            trackingOptions: {
+              desiredStoppedUpdateInterval: 120,
+              fastestStoppedUpdateInterval: 60,
+              desiredMovingUpdateInterval: 30,
+              fastestMovingUpdateInterval: 15,
+              desiredSyncInterval: 20,
+              desiredAccuracy: 'high',
+              stopDuration: 140,
+              stopDistance: 70,
+              replay: 'none',
+              sync: 'all',
+              useStoppedGeofence: false,
+              showBlueBar: false,
+              syncGeofences: false,
+              syncGeofencesLimit: 0,
+              beacons: false,
+              foregroundServiceEnabled: true,
+            },
+          }).then((result) => {
+            console.log('Radar trip started =>', result);
+          }).catch((err) => {
+            console.error('Error starting Radar trip:', err);
+          });
+        }
       } else {
         setOnboardingCompleted(false);
         if (unsubscribeDb) unsubscribeDb();
@@ -2532,5 +2535,91 @@ app.listen(PORT, () => {
 });
 ```
 
-I am having an issue on my iPhone when I open the app for the first time: I get prompted by my OS to give location permissions when using the app, then to switch it to always allow, but after having accepted both, I still have the "Location Needed" view open on the app, prompting me to open my settings. I need that view to dynamically appear whenever my app's location permissions have changed.
-I need you to fully develop and fix this.
+This all works, but I want to add a new feature: When the app detects that I've shaken my phone, I want confetti to fall from the screen for a little bit. I found this package:
+
+```
+react-confetti
+Confetti without the cleanup. Demo
+
+Build Status npm npm bundle size npm type definitions
+
+Based on a pen by @Gthibaud: https://codepen.io/Gthibaud/pen/ENzXbp
+
+demogif
+
+Install
+npm install react-confetti
+Use
+width and height props are recommended. They will default to the initial window dimensions, but will not respond to resize events. It is recommended to provide the dimensions yourself. Here is an example using a hook:
+
+import React from 'react'
+import { useWindowSize } from 'react-use'
+import Confetti from 'react-confetti'
+
+export default () => {
+  const { width, height } = useWindowSize()
+  return (
+    <Confetti
+      width={width}
+      height={height}
+    />
+  )
+}
+Props
+Property	Type	Default	Description
+width	Number	window.innerWidth || 300	Width of the <canvas> element.
+height	Number	window.innerHeight || 200	Height of the <canvas> element.
+numberOfPieces	Number	200	Number of confetti pieces at one time.
+confettiSource	{ x: Number, y: Number, w: Number, h: Number }	{x: 0, y: 0, w: canvas.width, h:0}	Rectangle where the confetti should spawn. Default is across the top.
+friction	Number	0.99	
+wind	Number	0	
+gravity	Number	0.1	
+initialVelocityX	Number | { min: Number, max: Number }	4	Range of values between which confetti is emitted horizontally, positive numbers being rightward, and negative numbers being leftward. Giving a number x is equivalent to giving a range { min: -x, max: x }.
+initialVelocityY	Number | { min: Number, max: Number }	10	Range of values between which confetti is emitted vertically, positive numbers being downward, and negative numbers being upward. Giving a number y is equivalent to giving a range { min: -y, max: 0 }.
+colors	String[]	['#f44336'
+'#e91e63'
+'#9c27b0'
+'#673ab7'
+'#3f51b5'
+'#2196f3'
+'#03a9f4'
+'#00bcd4'
+'#009688'
+'#4CAF50'
+'#8BC34A'
+'#CDDC39'
+'#FFEB3B'
+'#FFC107'
+'#FF9800'
+'#FF5722'
+'#795548']
+All available Colors for the confetti pieces.
+opacity	Number	1.0	
+recycle	Bool	true	Keep spawning confetti after numberOfPieces pieces have been shown.
+run	Bool	true	Run the animation loop
+frameRate	Number | undefined	undefined	The capped frame rate of the animation.
+tweenDuration	Number	5000	How fast the confetti is added
+tweenFunction	(currentTime: number, currentValue: number, targetValue: number, duration: number, s?: number) => number	easeInOutQuad	See tween-functions
+drawShape	(context: CanvasRenderingContext2D) => void	undefined	See below
+onConfettiComplete	(confetti: Confetti) => void	undefined	Called when all confetti has fallen off-canvas.
+drawShape()
+Draw a custom shape for a particle. If not provided, defaults to a random selection of a square, circle or strip confetto. The function is called with the canvas context as a parameter and the Particle as the this context.
+
+For example, to draw all spirals:
+
+<Confetti
+  drawShape={ctx => {
+    ctx.beginPath()
+    for(let i = 0; i < 22; i++) {
+      const angle = 0.35 * i
+      const x = (0.2 + (1.5 * angle)) * Math.cos(angle)
+      const y = (0.2 + (1.5 * angle)) * Math.sin(angle)
+      ctx.lineTo(x, y)
+    }
+    ctx.stroke()
+    ctx.closePath()
+  }}
+/>
+```
+
+I want you to fully develop and implement this.
