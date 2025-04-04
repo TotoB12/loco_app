@@ -7,7 +7,7 @@ import { auth, db } from './firebaseConfig';
 import Radar from 'react-native-radar';
 import * as Location from 'expo-location';
 import * as IntentLauncher from 'expo-intent-launcher';
-import { Linking, Platform } from 'react-native';
+import { Linking, Platform, AppState } from 'react-native';
 
 // Screens
 import PermissionScreen from './screens/PermissionScreen';
@@ -22,44 +22,58 @@ export default function App() {
   const [hasLocationPermissions, setHasLocationPermissions] = useState(false);
   const [permissionErrorMessage, setPermissionErrorMessage] = useState('');
   const [user, setUser] = useState(null);
-  const [onboardingCompleted, setOnboardingCompleted] = useState(null); // Initially null to indicate loading
+  const [onboardingCompleted, setOnboardingCompleted] = useState(null);
   const [initializing, setInitializing] = useState(true);
 
-  // Check Location Permissions
-  useEffect(() => {
-    (async () => {
-      try {
-        let fg = await Location.getForegroundPermissionsAsync();
+  // Function to check location permissions
+  const checkLocationPermissions = async (isInitial = false) => {
+    if (isInitial) setIsCheckingPermissions(true);
+    try {
+      let fg = await Location.getForegroundPermissionsAsync();
+      if (fg.status !== 'granted') {
+        fg = await Location.requestForegroundPermissionsAsync();
         if (fg.status !== 'granted') {
-          fg = await Location.requestForegroundPermissionsAsync();
-          if (fg.status !== 'granted') {
-            setPermissionErrorMessage('App needs "While Using" location to function.');
-            setHasLocationPermissions(false);
-            setIsCheckingPermissions(false);
-            return;
-          }
+          setPermissionErrorMessage('App needs "While Using" location to function.');
+          setHasLocationPermissions(false);
+          return;
         }
+      }
 
-        let bg = await Location.getBackgroundPermissionsAsync();
-        if (bg.status !== 'granted') {
-          bg = await Location.requestBackgroundPermissionsAsync();
-        }
-
+      let bg = await Location.getBackgroundPermissionsAsync();
+      if (bg.status !== 'granted') {
+        bg = await Location.requestBackgroundPermissionsAsync();
         if (bg.status !== 'granted') {
           setPermissionErrorMessage('Please grant "Allow All the Time" location in Settings.');
           setHasLocationPermissions(false);
-        } else {
-          setPermissionErrorMessage('');
-          setHasLocationPermissions(true);
+          return;
         }
-      } catch (err) {
-        console.log('Error checking permissions =>', err);
-        setPermissionErrorMessage('Error checking permissions. Please enable them in Settings.');
-        setHasLocationPermissions(false);
-      } finally {
-        setIsCheckingPermissions(false);
       }
-    })();
+
+      setPermissionErrorMessage('');
+      setHasLocationPermissions(true);
+    } catch (err) {
+      console.log('Error checking permissions =>', err);
+      setPermissionErrorMessage('Error checking permissions. Please enable them in Settings.');
+      setHasLocationPermissions(false);
+    } finally {
+      if (isInitial) setIsCheckingPermissions(false);
+    }
+  };
+
+  // Permission checking with AppState listener
+  useEffect(() => {
+    // Initial check
+    checkLocationPermissions(true);
+
+    // Listen for app state changes
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        checkLocationPermissions(false);
+      }
+    });
+
+    // Cleanup listener
+    return () => subscription.remove();
   }, []);
 
   // Radar Setup
@@ -79,7 +93,7 @@ export default function App() {
     };
   }, [hasLocationPermissions]);
 
-  // Auth Listener and Onboarding Check
+  // Auth Listener and Radar Trip Start
   useEffect(() => {
     let unsubscribeDb;
     const unsubscribeAuth = auth.onAuthStateChanged((currentUser) => {
@@ -93,9 +107,9 @@ export default function App() {
               const userData = snapshot.val();
               setOnboardingCompleted(!!userData.onboardingCompleted);
             } else {
-              setOnboardingCompleted(false); // New user, onboarding not completed
+              setOnboardingCompleted(false);
             }
-            if (initializing) setInitializing(false); // Only set initializing false after first data fetch
+            if (initializing) setInitializing(false);
           },
           (error) => {
             console.error('Error listening to user data:', error);
@@ -108,51 +122,40 @@ export default function App() {
         Radar.setDescription(currentUser.phoneNumber || 'Radar User');
         Radar.setMetadata({ role: 'tester' });
 
-        (async () => {
-          try {
-            const fgStatus = await Radar.requestPermissions(false);
-            console.log('Foreground perms =>', fgStatus);
-            if (fgStatus === 'GRANTED_FOREGROUND') {
-              const bgStatus = await Radar.requestPermissions(true);
-              console.log('Background perms =>', bgStatus);
-            }
-          } catch (err) {
-            console.error('Error requesting Radar permissions =>', err);
-          }
+        if (hasLocationPermissions) {
+          Radar.setForegroundServiceOptions({
+            text: 'Location tracking is active',
+            title: 'Tracking in background',
+            updatesOnly: false,
+            importance: 2,
+          });
 
-          if (hasLocationPermissions) {
-            Radar.setForegroundServiceOptions({
-              text: 'Location tracking is active',
-              title: 'Tracking in background',
-              updatesOnly: false,
-              importance: 2,
-            });
-
-            Radar.startTrip({
-              tripOptions: { externalId: currentUser.uid },
-              trackingOptions: {
-                desiredStoppedUpdateInterval: 120,
-                fastestStoppedUpdateInterval: 60,
-                desiredMovingUpdateInterval: 30,
-                fastestMovingUpdateInterval: 15,
-                desiredSyncInterval: 20,
-                desiredAccuracy: 'high',
-                stopDuration: 140,
-                stopDistance: 70,
-                replay: 'none',
-                sync: 'all',
-                useStoppedGeofence: false,
-                showBlueBar: false,
-                syncGeofences: false,
-                syncGeofencesLimit: 0,
-                beacons: false,
-                foregroundServiceEnabled: true,
-              },
-            }).then((result) => {
-              console.log('Radar trip started =>', result);
-            });
-          }
-        })();
+          Radar.startTrip({
+            tripOptions: { externalId: currentUser.uid },
+            trackingOptions: {
+              desiredStoppedUpdateInterval: 120,
+              fastestStoppedUpdateInterval: 60,
+              desiredMovingUpdateInterval: 30,
+              fastestMovingUpdateInterval: 15,
+              desiredSyncInterval: 20,
+              desiredAccuracy: 'high',
+              stopDuration: 140,
+              stopDistance: 70,
+              replay: 'none',
+              sync: 'all',
+              useStoppedGeofence: false,
+              showBlueBar: false,
+              syncGeofences: false,
+              syncGeofencesLimit: 0,
+              beacons: false,
+              foregroundServiceEnabled: true,
+            },
+          }).then((result) => {
+            console.log('Radar trip started =>', result);
+          }).catch((err) => {
+            console.error('Error starting Radar trip:', err);
+          });
+        }
       } else {
         setOnboardingCompleted(false);
         if (unsubscribeDb) unsubscribeDb();
