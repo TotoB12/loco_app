@@ -263,6 +263,8 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import BottomSheet, { BottomSheetScrollView, BottomSheetModal, BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { showLocation } from 'react-native-map-link';
+import { Accelerometer } from 'expo-sensors';
+import ConfettiCannon from 'react-native-confetti-cannon';
 
 import {
   shareLocation,
@@ -272,6 +274,9 @@ import {
 
 import { COLORS } from '../colors';
 import AnimatedUserMarker from './AnimatedUserMarker';
+
+const SHAKE_THRESHOLD = 1.7; // Experiment with this value
+const MIN_TIME_BETWEEN_SHAKES_MS = 3000; // Prevent multiple triggers
 
 /* -------------------------
    Utility Functions
@@ -512,6 +517,7 @@ function SharingDialog({ targetUser, sharingStatus, onShare, onStopSharing, onSt
 ------------------------- */
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
+  const { height: screenHeight, width: screenWidth } = Dimensions.get('window');
 
   // Map & location state
   const [currentLocation, setCurrentLocation] = useState(null);
@@ -565,9 +571,55 @@ export default function HomeScreen() {
     }
   }, [selectedSocialUser]);
 
-  const { height: screenHeight } = Dimensions.get('window');
   const BOTTOM_SHEET_PERCENTAGE = 0.32;
   const bottomInset = screenHeight * BOTTOM_SHEET_PERCENTAGE;
+
+  const confettiRef = useRef(null);
+
+  const lastShakeTime = useRef(0);
+  const lastAcceleration = useRef({ x: 0, y: 0, z: 0 });
+
+  useEffect(() => {
+    let subscription;
+    const _subscribe = () => {
+      Accelerometer.setUpdateInterval(100); // Check ~10 times/sec
+      subscription = Accelerometer.addListener(accelerometerData => {
+        const { x, y, z } = accelerometerData;
+        const now = Date.now();
+
+        // Calculate the change in acceleration
+        const deltaX = Math.abs(lastAcceleration.current.x - x);
+        const deltaY = Math.abs(lastAcceleration.current.y - y);
+        const deltaZ = Math.abs(lastAcceleration.current.z - z);
+
+        // Simple shake detection: sum of changes above threshold
+        const accelerationChange = deltaX + deltaY + deltaZ;
+
+        if (
+          accelerationChange > SHAKE_THRESHOLD &&
+          now - lastShakeTime.current > MIN_TIME_BETWEEN_SHAKES_MS
+        ) {
+          console.log('Shake detected!');
+          lastShakeTime.current = now;
+
+          // Trigger confetti
+          confettiRef.current?.start();
+        }
+
+        lastAcceleration.current = { x, y, z };
+      });
+    };
+
+    const _unsubscribe = () => {
+      subscription && subscription.remove();
+      subscription = null;
+    };
+
+    _subscribe();
+
+    // Cleanup on unmount
+    return () => _unsubscribe();
+  }, []);
 
   const updateCameraToUser = (user) => {
     if (!user || !user.location) return;
@@ -1117,6 +1169,17 @@ export default function HomeScreen() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <BottomSheetModalProvider>
         <View style={styles.container}>
+          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, pointerEvents: 'none' }}>
+            <ConfettiCannon
+              ref={confettiRef}
+              count={200} // Number of confetti pieces
+              origin={{ x: screenWidth / 2, y: -10 }} // Start from center-top
+              autoStart={false} // Don't start automatically
+              fadeOut={true} // Fade out at the end
+              explosionSpeed={400} // How fast they explode outwards
+              fallSpeed={3000} // How fast they fall down
+            />
+          </View>
           <MapView
             style={StyleSheet.absoluteFillObject}
             attributionEnabled={false}
@@ -1246,7 +1309,7 @@ export default function HomeScreen() {
                 />
               </ScrollView>
               <View style={styles.modalFooter}>
-              <Text>Don't login to multiple phone, this will break.</Text>
+                <Text>Don't login to multiple phone, this will break.</Text>
                 <TouchableOpacity style={styles.logoutButton} onPress={handleSignOut}>
                   <Text style={styles.logoutButtonText}>Log Out</Text>
                 </TouchableOpacity>
@@ -2259,11 +2322,13 @@ package.json
     "expo-image-picker": "~16.0.5",
     "expo-intent-launcher": "~12.0.2",
     "expo-location": "~18.0.5",
+    "expo-sensors": "^14.0.2",
     "expo-splash-screen": "~0.29.21",
     "expo-status-bar": "~2.0.0",
     "expo-task-manager": "~12.0.4",
     "react": "18.3.1",
     "react-native": "0.76.5",
+    "react-native-confetti-cannon": "^1.5.2",
     "react-native-gesture-handler": "~2.20.2",
     "react-native-keyboard-aware-scroll-view": "^0.9.5",
     "react-native-map-link": "^3.8.0",
@@ -2535,91 +2600,5 @@ app.listen(PORT, () => {
 });
 ```
 
-This all works, but I want to add a new feature: When the app detects that I've shaken my phone, I want confetti to fall from the screen for a little bit. I found this package:
-
-```
-react-confetti
-Confetti without the cleanup. Demo
-
-Build Status npm npm bundle size npm type definitions
-
-Based on a pen by @Gthibaud: https://codepen.io/Gthibaud/pen/ENzXbp
-
-demogif
-
-Install
-npm install react-confetti
-Use
-width and height props are recommended. They will default to the initial window dimensions, but will not respond to resize events. It is recommended to provide the dimensions yourself. Here is an example using a hook:
-
-import React from 'react'
-import { useWindowSize } from 'react-use'
-import Confetti from 'react-confetti'
-
-export default () => {
-  const { width, height } = useWindowSize()
-  return (
-    <Confetti
-      width={width}
-      height={height}
-    />
-  )
-}
-Props
-Property	Type	Default	Description
-width	Number	window.innerWidth || 300	Width of the <canvas> element.
-height	Number	window.innerHeight || 200	Height of the <canvas> element.
-numberOfPieces	Number	200	Number of confetti pieces at one time.
-confettiSource	{ x: Number, y: Number, w: Number, h: Number }	{x: 0, y: 0, w: canvas.width, h:0}	Rectangle where the confetti should spawn. Default is across the top.
-friction	Number	0.99	
-wind	Number	0	
-gravity	Number	0.1	
-initialVelocityX	Number | { min: Number, max: Number }	4	Range of values between which confetti is emitted horizontally, positive numbers being rightward, and negative numbers being leftward. Giving a number x is equivalent to giving a range { min: -x, max: x }.
-initialVelocityY	Number | { min: Number, max: Number }	10	Range of values between which confetti is emitted vertically, positive numbers being downward, and negative numbers being upward. Giving a number y is equivalent to giving a range { min: -y, max: 0 }.
-colors	String[]	['#f44336'
-'#e91e63'
-'#9c27b0'
-'#673ab7'
-'#3f51b5'
-'#2196f3'
-'#03a9f4'
-'#00bcd4'
-'#009688'
-'#4CAF50'
-'#8BC34A'
-'#CDDC39'
-'#FFEB3B'
-'#FFC107'
-'#FF9800'
-'#FF5722'
-'#795548']
-All available Colors for the confetti pieces.
-opacity	Number	1.0	
-recycle	Bool	true	Keep spawning confetti after numberOfPieces pieces have been shown.
-run	Bool	true	Run the animation loop
-frameRate	Number | undefined	undefined	The capped frame rate of the animation.
-tweenDuration	Number	5000	How fast the confetti is added
-tweenFunction	(currentTime: number, currentValue: number, targetValue: number, duration: number, s?: number) => number	easeInOutQuad	See tween-functions
-drawShape	(context: CanvasRenderingContext2D) => void	undefined	See below
-onConfettiComplete	(confetti: Confetti) => void	undefined	Called when all confetti has fallen off-canvas.
-drawShape()
-Draw a custom shape for a particle. If not provided, defaults to a random selection of a square, circle or strip confetto. The function is called with the canvas context as a parameter and the Particle as the this context.
-
-For example, to draw all spirals:
-
-<Confetti
-  drawShape={ctx => {
-    ctx.beginPath()
-    for(let i = 0; i < 22; i++) {
-      const angle = 0.35 * i
-      const x = (0.2 + (1.5 * angle)) * Math.cos(angle)
-      const y = (0.2 + (1.5 * angle)) * Math.sin(angle)
-      ctx.lineTo(x, y)
-    }
-    ctx.stroke()
-    ctx.closePath()
-  }}
-/>
-```
-
-I want you to fully develop and implement this.
+This all works, but I am having an issue: the Log Out button in the settings modal doesnt work, sending `Error signing out: [Error: [auth/no-current-user] No user currently signed in.]` in the console.
+How can I resolve this?

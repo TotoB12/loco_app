@@ -28,6 +28,8 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import BottomSheet, { BottomSheetScrollView, BottomSheetModal, BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { showLocation } from 'react-native-map-link';
+import { Accelerometer } from 'expo-sensors';
+import ConfettiCannon from 'react-native-confetti-cannon';
 
 import {
   shareLocation,
@@ -37,6 +39,9 @@ import {
 
 import { COLORS } from '../colors';
 import AnimatedUserMarker from './AnimatedUserMarker';
+
+const SHAKE_THRESHOLD = 1.7; // Experiment with this value
+const MIN_TIME_BETWEEN_SHAKES_MS = 3000; // Prevent multiple triggers
 
 /* -------------------------
    Utility Functions
@@ -277,6 +282,7 @@ function SharingDialog({ targetUser, sharingStatus, onShare, onStopSharing, onSt
 ------------------------- */
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
+  const { height: screenHeight, width: screenWidth } = Dimensions.get('window');
 
   // Map & location state
   const [currentLocation, setCurrentLocation] = useState(null);
@@ -330,9 +336,55 @@ export default function HomeScreen() {
     }
   }, [selectedSocialUser]);
 
-  const { height: screenHeight } = Dimensions.get('window');
   const BOTTOM_SHEET_PERCENTAGE = 0.32;
   const bottomInset = screenHeight * BOTTOM_SHEET_PERCENTAGE;
+
+  const confettiRef = useRef(null);
+
+  const lastShakeTime = useRef(0);
+  const lastAcceleration = useRef({ x: 0, y: 0, z: 0 });
+
+  useEffect(() => {
+    let subscription;
+    const _subscribe = () => {
+      Accelerometer.setUpdateInterval(100); // Check ~10 times/sec
+      subscription = Accelerometer.addListener(accelerometerData => {
+        const { x, y, z } = accelerometerData;
+        const now = Date.now();
+
+        // Calculate the change in acceleration
+        const deltaX = Math.abs(lastAcceleration.current.x - x);
+        const deltaY = Math.abs(lastAcceleration.current.y - y);
+        const deltaZ = Math.abs(lastAcceleration.current.z - z);
+
+        // Simple shake detection: sum of changes above threshold
+        const accelerationChange = deltaX + deltaY + deltaZ;
+
+        if (
+          accelerationChange > SHAKE_THRESHOLD &&
+          now - lastShakeTime.current > MIN_TIME_BETWEEN_SHAKES_MS
+        ) {
+          console.log('Shake detected!');
+          lastShakeTime.current = now;
+
+          // Trigger confetti
+          confettiRef.current?.start();
+        }
+
+        lastAcceleration.current = { x, y, z };
+      });
+    };
+
+    const _unsubscribe = () => {
+      subscription && subscription.remove();
+      subscription = null;
+    };
+
+    _subscribe();
+
+    // Cleanup on unmount
+    return () => _unsubscribe();
+  }, []);
 
   const updateCameraToUser = (user) => {
     if (!user || !user.location) return;
@@ -882,6 +934,17 @@ export default function HomeScreen() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <BottomSheetModalProvider>
         <View style={styles.container}>
+          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, pointerEvents: 'none' }}>
+            <ConfettiCannon
+              ref={confettiRef}
+              count={200} // Number of confetti pieces
+              origin={{ x: screenWidth / 2, y: -10 }} // Start from center-top
+              autoStart={false} // Don't start automatically
+              fadeOut={true} // Fade out at the end
+              explosionSpeed={400} // How fast they explode outwards
+              fallSpeed={3000} // How fast they fall down
+            />
+          </View>
           <MapView
             style={StyleSheet.absoluteFillObject}
             attributionEnabled={false}
@@ -1011,7 +1074,7 @@ export default function HomeScreen() {
                 />
               </ScrollView>
               <View style={styles.modalFooter}>
-              <Text>Don't login to multiple phone, this will break.</Text>
+                <Text>Don't login to multiple phone, this will break.</Text>
                 <TouchableOpacity style={styles.logoutButton} onPress={handleSignOut}>
                   <Text style={styles.logoutButtonText}>Log Out</Text>
                 </TouchableOpacity>
