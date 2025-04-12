@@ -15,7 +15,6 @@ import {
   Dimensions
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { signOut } from '@react-native-firebase/auth';
 import { ref, onValue, update, get } from '@react-native-firebase/database';
 import { auth, db } from '../firebaseConfig';
 import Radar from 'react-native-radar';
@@ -755,13 +754,14 @@ export default function HomeScreen() {
   // Sign out
   const handleSignOut = async () => {
     try {
-      await signOut(auth);
+      await auth.signOut(); // <-- Correct usage: call signOut() on the auth instance
+      console.log('User signed out!');
     } catch (error) {
-      console.log('Error signing out:', error);
+      console.error('Error signing out:', error); // Log as error for clarity
     }
   };
 
-  // Image upload handlers (unchanged)
+  // Image upload handlers
   const IMGUR_CLIENT_ID = '4916641447bc9f6';
 
   const deleteImgurImage = async (deleteHash) => {
