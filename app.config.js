@@ -5,7 +5,7 @@ export default ({ config }) => {
     ...config,
     "name": "loco",
     "slug": "loco",
-    "version": "0.1.5",
+    "version": "0.1.6",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "platforms": ["ios", "android"],
@@ -73,7 +73,7 @@ export default ({ config }) => {
     ],
     "ios": {
       "googleServicesFile": "./GoogleService-Info.plist",
-      "buildNumber": "0.1.5",
+      "buildNumber": "0.1.6",
       "supportsTablet": true,
       "bundleIdentifier": "com.antoninbeliard.loco",
       "infoPlist": {

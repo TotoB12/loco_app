@@ -132,25 +132,24 @@ export default function App() {
 
           Radar.startTrip({
             tripOptions: { externalId: currentUser.uid },
-            // trackingOptions: {
-            //   desiredStoppedUpdateInterval: 120,
-            //   fastestStoppedUpdateInterval: 60,
-            //   desiredMovingUpdateInterval: 30,
-            //   fastestMovingUpdateInterval: 15,
-            //   desiredSyncInterval: 20,
-            //   desiredAccuracy: 'high',
-            //   stopDuration: 140,
-            //   stopDistance: 70,
-            //   replay: 'none',
-            //   sync: 'all',
-            //   useStoppedGeofence: false,
-            //   showBlueBar: false,
-            //   syncGeofences: false,
-            //   syncGeofencesLimit: 0,
-            //   beacons: false,
-            //   foregroundServiceEnabled: true,
-            // },
-            trackingOptions: Radar.presetContinuous
+            trackingOptions: {
+              desiredStoppedUpdateInterval: 240, // 120
+              fastestStoppedUpdateInterval: 240, // 60
+              desiredMovingUpdateInterval: 150, // 30
+              fastestMovingUpdateInterval: 150, // 15
+              desiredSyncInterval: 20, // 20
+              desiredAccuracy: 'high', // 'high'
+              stopDuration: 140, // 120
+              stopDistance: 70, // 70
+              replay: 'none', // 'none'
+              sync: 'all', // 'all'
+              showBlueBar: false, // false
+              useStoppedGeofence: false, // false
+              syncGeofences: false, // false
+              syncGeofencesLimit: 0, // 0
+              beacons: false, // false
+              foregroundServiceEnabled: true, // true
+            },
           }).then((result) => {
             console.log('Radar trip started =>', result);
           }).catch((err) => {
